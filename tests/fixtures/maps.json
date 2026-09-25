@@ -1,0 +1,29 @@
+{
+  "search_metadata": {"id": "test_maps", "status": "Success"},
+  "local_results": [
+    {
+      "title": "Café Coffee Day - Airport",
+      "address": "Chennai International Airport, Tirusulam",
+      "phone": "+91 44 1234 5678",
+      "rating": 4.1,
+      "reviews": 520,
+      "type": "Cafe",
+      "hours": "Open 24 hours",
+      "website": "https://cafecoffeeday.com",
+      "gps_coordinates": {"latitude": 12.9941, "longitude": 80.1709},
+      "place_id": "ChIJ_test1"
+    },
+    {
+      "title": "Starbucks - Chennai Airport",
+      "address": "Domestic Terminal, Chennai Airport",
+      "phone": "+91 44 9876 5432",
+      "rating": 4.3,
+      "reviews": 890,
+      "type": "Coffee shop",
+      "hours": "5:00 AM – 11:00 PM",
+      "website": "https://starbucks.in",
+      "gps_coordinates": {"latitude": 12.9945, "longitude": 80.1715},
+      "place_id": "ChIJ_test2"
+    }
+  ]
+}

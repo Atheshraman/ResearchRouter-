@@ -1,0 +1,7 @@
+services:
+  research-router:
+    build: .
+    env_file:
+      - .env
+    stdin_open: true
+    tty: true

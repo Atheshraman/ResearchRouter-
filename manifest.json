@@ -1,0 +1,56 @@
+{
+  "manifest_version": "0.4",
+  "name": "research-router",
+  "display_name": "ResearchRouter",
+  "version": "0.1.0",
+  "description": "An intelligent research-routing MCP server that automatically selects the appropriate SerpApi engine for natural-language research queries.",
+  "long_description": "ResearchRouter provides one intelligent research tool that automatically detects whether a query is about general web research, news, academic papers, jobs, shopping, or places, then routes the query to the appropriate SerpApi engine.",
+  "author": {
+    "name": "Athesh Raman"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "serpapi",
+    "research",
+    "agent",
+    "ai",
+    "search"
+  ],
+  "server": {
+  "type": "uv",
+  "entry_point": "src/research_router/__main__.py",
+  "mcp_config": {
+    "command": "uv",
+    "args": [
+      "run",
+      "--directory",
+      "${__dirname}",
+      "python",
+      "src/research_router/__main__.py"
+    ],
+    "env": {
+      "SERPAPI_API_KEY": "${user_config.serpapi_api_key}",
+      "GOOGLE_API_KEY": "${user_config.google_api_key}",
+      "LLM_PROVIDER": "gemini",
+      "LLM_MODEL": "gemini-2.5-flash"
+    }
+  }
+  },
+  "user_config": {
+    "serpapi_api_key": {
+      "type": "string",
+      "title": "SerpApi API Key",
+      "description": "API key used for SerpApi searches.",
+      "sensitive": true,
+      "required": true
+    },
+    "google_api_key": {
+      "type": "string",
+      "title": "Google Gemini API Key",
+      "description": "API key used by Gemini for research intent classification.",
+      "sensitive": true,
+      "required": true
+    }
+  }
+}

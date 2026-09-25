@@ -1,0 +1,34 @@
+{
+  "search_metadata": {"id": "test_jobs", "status": "Success"},
+  "jobs_results": [
+    {
+      "title": "AI/ML Intern",
+      "company_name": "TechCorp India",
+      "location": "Chennai, Tamil Nadu",
+      "via": "via LinkedIn",
+      "description": "We are looking for passionate AI/ML interns to join our research team in Chennai. You will work on cutting-edge NLP and computer vision projects.",
+      "detected_extensions": {
+        "posted_at": "2 days ago",
+        "schedule_type": "Internship",
+        "salary": "₹25,000/month"
+      },
+      "apply_options": [
+        {"link": "https://linkedin.com/jobs/view/123456"}
+      ]
+    },
+    {
+      "title": "Data Science Intern",
+      "company_name": "StartupXYZ",
+      "location": "Chennai, Tamil Nadu",
+      "via": "via Indeed",
+      "description": "Join our fast-growing startup as a data science intern. Work with real-world datasets and production ML systems.",
+      "detected_extensions": {
+        "posted_at": "5 days ago",
+        "schedule_type": "Internship"
+      },
+      "apply_options": [
+        {"link": "https://indeed.com/jobs/view/789"}
+      ]
+    }
+  ]
+}

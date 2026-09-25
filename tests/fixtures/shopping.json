@@ -1,0 +1,26 @@
+{
+  "search_metadata": {"id": "test_shopping", "status": "Success"},
+  "shopping_results": [
+    {
+      "title": "ASUS ROG Strix G16 Gaming Laptop - RTX 4060",
+      "link": "https://shop.example.com/asus-rog-g16",
+      "source": "Flipkart",
+      "price": "₹89,990",
+      "extracted_price": 89990,
+      "rating": 4.5,
+      "reviews": 234,
+      "thumbnail": "https://img.example.com/asus-rog.jpg",
+      "delivery": "Free delivery"
+    },
+    {
+      "title": "Lenovo Legion 5 Pro - RTX 4050",
+      "link": "https://shop.example.com/lenovo-legion",
+      "source": "Amazon",
+      "price": "₹79,999",
+      "extracted_price": 79999,
+      "rating": 4.3,
+      "reviews": 189,
+      "thumbnail": "https://img.example.com/lenovo-legion.jpg"
+    }
+  ]
+}

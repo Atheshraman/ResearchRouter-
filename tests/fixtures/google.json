@@ -1,0 +1,19 @@
+{
+  "search_metadata": {"id": "test_google", "status": "Success"},
+  "organic_results": [
+    {
+      "position": 1,
+      "title": "What is Retrieval Augmented Generation?",
+      "link": "https://example.com/rag-explained",
+      "snippet": "RAG is a technique that combines retrieval and generation...",
+      "source": "Example Blog"
+    },
+    {
+      "position": 2,
+      "title": "RAG Tutorial - Complete Guide",
+      "link": "https://example.com/rag-tutorial",
+      "snippet": "Learn how to build RAG systems from scratch...",
+      "source": "ML Journal"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "search_metadata": {"id": "test_news", "status": "Success"},
+  "news_results": [
+    {
+      "title": "AI Breakthrough: New Model Surpasses GPT-4",
+      "link": "https://news.example.com/ai-breakthrough",
+      "snippet": "A new AI model has set records on multiple benchmarks...",
+      "source": {"name": "Tech News Daily"},
+      "date": "2 hours ago",
+      "thumbnail": "https://img.example.com/thumb1.jpg"
+    },
+    {
+      "title": "OpenAI Announces New Research Lab in India",
+      "link": "https://news.example.com/openai-india",
+      "snippet": "OpenAI expands operations with a new research facility...",
+      "source": {"name": "Business Standard"},
+      "date": "5 hours ago"
+    }
+  ]
+}

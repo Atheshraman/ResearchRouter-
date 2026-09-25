@@ -1,0 +1,22 @@
+{
+  "search_metadata": {"id": "test_scholar", "status": "Success"},
+  "organic_results": [
+    {
+      "position": 1,
+      "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+      "link": "https://arxiv.org/abs/2005.11401",
+      "snippet": "We explore a general-purpose fine-tuning recipe for retrieval-augmented generation...",
+      "publication_info": {"summary": "P Lewis, E Perez - NeurIPS, 2020"},
+      "inline_links": {"cited_by": {"total": 3500}},
+      "resources": [{"title": "PDF", "link": "https://arxiv.org/pdf/2005.11401"}]
+    },
+    {
+      "position": 2,
+      "title": "Self-RAG: Learning to Retrieve, Generate, and Critique through Self-Reflection",
+      "link": "https://arxiv.org/abs/2310.11511",
+      "snippet": "Despite their remarkable capabilities, large language models often produce...",
+      "publication_info": {"summary": "A Asai - ICLR, 2024"},
+      "inline_links": {"cited_by": {"total": 850}}
+    }
+  ]
+}
