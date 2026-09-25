@@ -175,5 +175,3 @@ docker build -t research-router-mcp .
 docker run -i --env-file .env research-router-mcp
 ```
 
-## License
-MIT License
