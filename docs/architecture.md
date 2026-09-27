@@ -58,7 +58,7 @@ research(query, context_budget?, session_id?, use_memory?, save_to_memory?, debu
 | `agent/runner.py` | Wave-based execution. Independent tasks run concurrently (bounded by `MAX_CONCURRENT_SEARCHES`), and dependent tasks run in later waves. Each call has a timeout (`TASK_TIMEOUT`) and uses the cache. Deep-research angle searches run only if the primary search returned too few relevant results. A failed or empty specialist engine is retried once on web search. |
 | `context/reducer.py` | Deterministic reduction: clean HTML and boilerplate → dedup by normalised URL, title and near-duplicate text (3-gram Jaccard) → relevance (query coverage, with IDF as a tie-breaker, a title bonus and a freshness bonus) → filter (keeping a minimum per task) → extract the relevant or numeric sentences → compress step by step only while over budget (shorter claims, compact fields, then drop the lowest-value items from the most-represented task). |
 | `context/evidence.py` | `Evidence{claim, source{title, url, date, publisher}, relevance_score, source_type, recorded_at}`. Provenance survives every compression step. |
-| `context/tokens.py` | Token estimation: `tiktoken` if installed, otherwise a conservative character/word heuristic. It never raises. |
+| `context/tokens.py` | Token counting with `tiktoken` (`cl100k_base`), falling back to a conservative character/word heuristic if the encoding can't load. It never raises. |
 | `memory/obsidian.py` | Optional vault read/write. Scans only `<vault>/Research/`, bounded by file count and bytes per file, and returns the best passages. Writes are atomic, and paths are sanitised and confined to the research folder. |
 | `agent/metrics.py` | Per-request metrics, the debug report, and per-mode averages used by `--compare`. |
 
