@@ -4,9 +4,10 @@ The MCP server cannot know the exact context window (or remaining space) of
 the calling LLM, so budgets here are an *output* budget: an upper bound on
 how many tokens of research context this server returns.
 
-Estimation uses ``tiktoken`` when it happens to be installed and otherwise a
-character/word heuristic that slightly over-estimates for English text,
-which is the safe direction for a budget.
+Estimation uses ``tiktoken`` (``cl100k_base``, a close approximation of
+Claude's tokenizer) and falls back to a character/word heuristic that
+slightly over-estimates, the safe direction for a budget, if tiktoken is
+unavailable or can't download its encoding (e.g. offline on first use).
 """
 
 from __future__ import annotations
@@ -29,7 +30,7 @@ def _heuristic(text: str) -> int:
 
 def _load_encoder() -> Callable[[str], int] | None:
     try:
-        import tiktoken  # type: ignore[import-not-found]
+        import tiktoken
 
         enc = tiktoken.get_encoding("cl100k_base")
         return lambda s: len(enc.encode(s, disallowed_special=()))

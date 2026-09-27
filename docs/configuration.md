@@ -50,8 +50,10 @@ Environment variables take precedence over `.env`. At startup the server logs a 
 
 The budget is an **output** budget. The server cannot see the calling LLM's
 context window, so it guarantees only that its own response stays within the
-estimate. Tokens are estimated with `tiktoken` if it is installed, otherwise
-with a conservative character/word heuristic.
+estimate. Tokens are counted with `tiktoken` (`cl100k_base`, a close
+approximation of Claude's tokenizer; installed as a dependency). If its
+encoding file can't be downloaded on first use (e.g. offline), a
+conservative character/word heuristic is used instead.
 
 ## Obsidian memory (optional)
 

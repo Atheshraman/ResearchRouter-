@@ -80,7 +80,7 @@ The original classifier, planner, executor, engines and cache are all still ther
 | SerpApi API key | Yes | [serpapi.com/manage-api-key](https://serpapi.com/manage-api-key) |
 | Google Gemini API key | No | Only used to classify ambiguous queries; without it, built-in rules are used |
 | Obsidian vault | No | Any folder works; the Obsidian app doesn't need to be running |
-| `tiktoken` | No | If installed, token counts are exact instead of estimated |
+| `tiktoken` | Included | Installed automatically for token counting (`cl100k_base`). It downloads a ~1.7 MB encoding file on first use; offline, a built-in estimate is used |
 
 ## 💻 Installation
 
@@ -116,7 +116,7 @@ curl "https://serpapi.com/account.json?api_key=YOUR_KEY"   # shows plan and sear
 ### Option A: install as a Claude Desktop extension (`.mcpb`)
 
 ```bash
-npx @anthropic-ai/mcpb pack . research-router-0.1.3.mcpb
+npx @anthropic-ai/mcpb pack . research-router-0.1.4.mcpb
 ```
 
 Double-click the `.mcpb` (or use Claude Desktop → Settings → Extensions → Install). The settings screen asks for your **SerpApi API key**. The **Gemini key** and **Obsidian vault** are optional; leave the Gemini field empty unless the key works.
