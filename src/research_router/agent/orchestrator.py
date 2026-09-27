@@ -16,7 +16,12 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from research_router.agent.metrics import MetricsAggregator, RequestMetrics, render_debug_report
+from research_router.agent.metrics import (
+    MetricsAggregator,
+    RequestMetrics,
+    log_research_summary,
+    render_debug_report,
+)
 from research_router.agent.runner import TaskOutcome, TaskRunner
 from research_router.agent.task_planner import ExecutionPlan, TaskPlanner
 from research_router.context.evidence import Evidence, EvidenceSource, SourceType
@@ -161,6 +166,7 @@ class ResearchAgent:
         m.response_tokens = estimate_tokens(response)
         self._set_compact_metrics(response, m)
         self._aggregator.record(m)
+        log_research_summary(query, sorted({t.tool for t in plan.tasks}), m)
 
         if debug:  # debug output is diagnostic and not counted against the budget
             response["debug"] = {

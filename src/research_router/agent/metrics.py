@@ -12,6 +12,10 @@ from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
+from research_router.utils.logging import get_logger
+
+logger = get_logger(__name__)
+
 
 @dataclass
 class RequestMetrics:
@@ -98,6 +102,27 @@ class MetricsAggregator:
             n = self._counts[mode]
             out[mode] = {"requests": n, **{f"avg_{k}": round(v / n, 2) for k, v in totals.items()}}
         return out
+
+
+def log_research_summary(query: str, tools: list[str], m: RequestMetrics) -> None:
+    """One INFO line per research call, so token savings are visible in client logs."""
+    logger.info(
+        "Research complete",
+        extra={
+            "extra_data": {
+                "mode": m.mode,
+                "query": query[:80],
+                "tools": ",".join(tools) or "none",
+                "tool_calls": m.tool_calls,
+                "cache_hits": m.cache_hits,
+                "results": f"{m.raw_results}->{m.final_evidence}",
+                "tokens": f"{m.input_tokens_estimated}->{m.output_context_tokens}",
+                "response_tokens": m.response_tokens,
+                "reduction": f"{m.compression_ratio:.1%}",
+                "time_ms": m.execution_time_ms,
+            }
+        },
+    )
 
 
 def render_debug_report(
