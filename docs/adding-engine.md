@@ -54,7 +54,7 @@ class YouTubeEngine(SearchEngine):
 
 ### 2. Register the Engine
 
-In `src/research_router/mcp/tools.py`, add to the `ResearchRouter.__init__`:
+In `src/research_router/mcp_tools/tools.py`, add to the `ResearchRouter.__init__`:
 
 ```python
 from research_router.engines.youtube import YouTubeEngine
@@ -87,11 +87,22 @@ In `src/research_router/router/planner.py`, add to `_DOMAIN_ENGINE_MAP`:
 ResearchDomain.YOUTUBE: "youtube",
 ```
 
-### 5. Write Tests
+### 5. Name the Tool for the Agent Layer
+
+The context-aware planner reports tools by logical name (in debug output, metrics and `tools_used`). In `src/research_router/agent/task_planner.py`, add:
+
+```python
+TOOL_NAMES["youtube"] = "video_search"                   # in the TOOL_NAMES dict
+_TASK_NAMES[ResearchDomain.YOUTUBE] = "find_videos"      # in the _TASK_NAMES dict
+```
+
+Without these entries the engine still works; it just appears under its raw engine key.
+
+### 6. Write Tests
 
 Create `tests/unit/test_youtube_engine.py` and test with mock SerpApi responses.
 
-### 6. Add Test Fixture
+### 7. Add Test Fixture
 
 Create `tests/fixtures/youtube.json` with a sample SerpApi response.
 
@@ -101,6 +112,6 @@ No changes needed to:
 - `server.py`
 - `executor.py`
 - MCP tool definitions
-- The research pipeline
+- The agent pipeline (context manager, runner, reducer, memory)
 
-The new engine is automatically available through the same `research()` tool.
+The new engine is automatically available through the same `research()` tool. The planner can also select it for one part of a multi-part request, and it gets the same timeout, cache, fallback, deduplication and budget handling as the built-in engines.

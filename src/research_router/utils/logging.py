@@ -51,11 +51,20 @@ class StructuredFormatter(logging.Formatter):
         return base
 
 
+# httpx logs every request URL at INFO, and SerpApi URLs carry ``api_key`` in
+# the query string — keep those out of logs (and out of MCP client log files).
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
 def get_logger(name: str, level: str = "INFO") -> logging.Logger:
-    """Return a logger with structured formatting attached to *stdout*."""
+    """Return a logger with structured formatting attached to *stderr*.
+
+    Never stdout: in stdio MCP mode stdout carries the JSON-RPC stream.
+    """
     logger = logging.getLogger(name)
     if not logger.handlers:
-        handler = logging.StreamHandler(sys.stdout)
+        handler = logging.StreamHandler(sys.stderr)
         handler.setFormatter(StructuredFormatter())
         logger.addHandler(handler)
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))
