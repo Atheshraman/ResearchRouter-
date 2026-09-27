@@ -42,3 +42,6 @@ htmlcov/
 
 # ─── MCP bundles ───────────────────
 *.mcpb
+
+# ─── Local Obsidian vault (personal notes) ─
+ResearchVault/
