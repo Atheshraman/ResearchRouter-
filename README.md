@@ -95,23 +95,33 @@ cp .env.example .env         # then add SERPAPI_API_KEY
 Minimal `.env`:
 
 ```bash
+# 64 lowercase hex characters, from https://serpapi.com/manage-api-key
 SERPAPI_API_KEY=your_serpapi_key
-# GOOGLE_API_KEY=            # optional
-# OBSIDIAN_VAULT_PATH=/Users/you/Documents/MyVault   # optional memory
-# CONTEXT_BUDGET=4000        # default response budget (estimated tokens)
+# Leave empty unless you have a working Gemini key (failed calls only add delay)
+GOOGLE_API_KEY=
+# Optional memory; any folder works, e.g. a ResearchVault/ folder in this repo (git-ignored)
+OBSIDIAN_VAULT_PATH=/absolute/path/to/ResearchVault
 ```
 
-All options are listed in [`docs/configuration.md`](docs/configuration.md).
+Check the key before your first search (this is free and uses no search credits):
+
+```bash
+curl "https://serpapi.com/account.json?api_key=YOUR_KEY"   # shows plan and searches left
+```
+
+`.env` is read by the CLI and by the manual MCP config below. The Claude Desktop extension (`.mcpb`) doesn't read it; it uses the values you enter on its settings screen. `.env` and `ResearchVault/` are git-ignored and never packed into a bundle. All options are listed in [`docs/configuration.md`](docs/configuration.md).
 
 ## 🔌 Using it from Claude
 
 ### Option A: install as a Claude Desktop extension (`.mcpb`)
 
 ```bash
-npx @anthropic-ai/mcpb pack . research-router.mcpb
+npx @anthropic-ai/mcpb pack . research-router-0.1.3.mcpb
 ```
 
-Double-click `research-router.mcpb` (or use Claude Desktop → Settings → Extensions → Install). The settings screen asks for your **SerpApi API key**. The **Gemini key** and **Obsidian vault** are optional.
+Double-click the `.mcpb` (or use Claude Desktop → Settings → Extensions → Install). The settings screen asks for your **SerpApi API key**. The **Gemini key** and **Obsidian vault** are optional; leave the Gemini field empty unless the key works.
+
+When updating, remove the old ResearchRouter extension first, install the new file, and re-enter the key.
 
 ### Option B: manual MCP config
 
@@ -175,19 +185,19 @@ The top-level keys are the same as the original response (`query`, `domain`, `en
 
 ```jsonc
 {
-  "query": "Find recent RAG papers and their GitHub implementations",
-  "domain": "multi",
+  "query": "Recent research papers about RAG hallucination",
+  "domain": "academic",
   "engine": "google_scholar",
   "results": [                        // FRESH evidence from this request only
     {
-      "claim": "We explore a general-purpose fine-tuning recipe for retrieval-augmented generation",
-      "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
-      "url": "https://arxiv.org/abs/2005.11401",
-      "source": "P Lewis, E Perez - NeurIPS, 2020",
-      "relevance": 0.1,
+      "claim": "RAG hallucination from Knowledge Conflict as a new research direction. Our work focuses on detecting RAG hallucinations …",
+      "title": "Redeep: Detecting hallucination in retrieval-augmented generation via mechanistic interpretability",
+      "url": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/7daf60e805e596c3bd1e843e72ea5560-Abstract-Conference.html",
+      "relevance": 0.62,
       "source_type": "web",
       "task": "t1"
     }
+    // … 9 more
   ],
   "previous_context": {               // only for follow-ups
     "label": "EARLIER IN THIS SESSION — results returned by a previous research turn.",
@@ -201,21 +211,23 @@ The top-level keys are the same as the original response (`query`, `domain`, `en
   "warnings": [],                     // e.g. memory unavailable; research still completes
   "errors": [],                       // per-tool failures, e.g. a timeout on one engine
   "metadata": {
-    "tools_used": ["academic_search", "github_search"],
+    "tools_used": ["academic_search"],
     "metrics": {
-      "tool_calls": 2, "parallel_tool_calls": 2, "cache_hits": 0,
-      "raw_results": 4, "final_evidence": 4,
-      "input_tokens_estimated": 323, "output_context_tokens": 292,
-      "response_tokens": 481, "compression_ratio": 0.096,
-      "memory_hits": 0, "execution_time_ms": 5
+      "tool_calls": 1, "parallel_tool_calls": 1, "cache_hits": 0,
+      "raw_results": 10, "final_evidence": 10,
+      "input_tokens_estimated": 1953, "output_context_tokens": 1364,
+      "response_tokens": 1768, "compression_ratio": 0.302,
+      "memory_hits": 0, "execution_time_ms": 2310
     }
   }
 }
 ```
 
-*(Values in these examples come from the test fixtures; real queries return more results and larger reductions.)*
+*(Real output from a live SerpApi run, trimmed to one result.)*
 
 ### Debug report (`debug=True` or `--trace`)
+
+Live output for a multi-part request:
 
 ```text
 ResearchRouter Debug
@@ -230,17 +242,17 @@ Tools selected:
 Tool calls: 2
 Parallel execution: yes (2 concurrent)
 
-Raw results: 4
-After deduplication: 4
-Relevant: 4
-Final evidence blocks: 4
+Raw results: 20
+After deduplication: 19
+Relevant: 18
+Final evidence blocks: 18
 
-Estimated raw context: 323 tokens
-Final context: 292 tokens (full response 481)
-Reduction: 9.6%
+Estimated raw context: 14,542 tokens
+Final context: 2,030 tokens (full response 2,376)
+Reduction: 86.0%
 
-Execution time: 0.01s
-Obsidian memory used: 0 notes (saved: Research/RAG/Overview)
+Execution time: 1.86s
+Obsidian memory used: 0 notes
 ```
 
 With `debug=True` the response also includes the internal execution plan, the resolved context, and reduction statistics for each section. Otherwise the plan stays internal.
@@ -288,20 +300,40 @@ uv run research-router --compare "RAG hallucination mitigation techniques"
 
 `--compare` runs both pipelines and prints **measured** averages (tool calls, parallel calls, raw/deduplicated/returned results, estimated input/context/response tokens, and execution time). No numbers are made up. Run it on your own queries to demonstrate the difference.
 
+## 📊 Measured results (live SerpApi run)
+
+One session against the real SerpApi API used 6 searches, 5 of them billed; the 6th was an identical repeat SerpApi served from its own cache.
+
+| Scenario | Searches | Raw → returned | Est. tokens (raw → context) |
+|---|---|---|---|
+| "Recent research papers about RAG hallucination" | 1 (Scholar) | 10 → 10 | 1,953 → 1,364 (**−30%**) |
+| "Find recent RAG papers and their GitHub implementations" | 2, **in parallel** | 20 → 18 (1 duplicate, 1 off-topic removed) | 14,542 → 2,030 (**−86%**) |
+| "What about the second paper?" | 1, resolved to that paper's title | 9 → 9 | 15,507 → 1,083 |
+| "compare them" | **0**, answered from session context | — | 601 → 512 |
+| "What did my previous RAG hallucination research find?" (new session) | **0**, recalled from the Obsidian note | — | 524 → 523 |
+| Old vs new pipeline, "RAG hallucination mitigation techniques" | 1 vs 1 | 9 vs 8 | **12,668 → 1,423 (−89%)** result tokens |
+
+How much the context shrinks depends on the engine. Scholar results are already compact, while web and GitHub results carry a lot of extra data. Token counts are estimates. Timing comparisons are only fair on uncached queries, because SerpApi caches identical searches for a while.
+
 ## 🛟 Troubleshooting
 
 | Symptom | Fix |
 |---------|-----|
-| `Authentication failed — check SERPAPI_API_KEY (SerpApi says: …)` | The key reached SerpApi and was rejected; the message in brackets is SerpApi's reason. Check the key with `curl "https://serpapi.com/account.json?api_key=YOUR_KEY"` (free, uses no searches) and re-enter it in the extension settings. |
-| `SERPAPI_API_KEY is required but was empty` | No key was passed to the server; set it in `.env`, the MCP `env` block, or the extension settings. |
+| `Authentication failed … (SerpApi says: …) [key received: N chars, ending …abcd …]` | SerpApi rejected the key the server received. The bracket describes that key (masked) and names the likely cause, as in the rows below. Check the key with `curl "https://serpapi.com/account.json?api_key=YOUR_KEY"` (free). |
+| `… — the value is still encrypted …` | The MCP host passed its stored secret without decrypting it. Re-enter the key in the extension settings, update Claude Desktop, or use the manual MCP config |
+| `… — this looks like a Google/Gemini API key …` | The keys are in the wrong fields; swap them |
+| `… — SerpApi keys are 64 lowercase hex characters` | The key is incomplete or has extra text; copy it again from serpapi.com/manage-api-key |
+| `key received: 0 chars` / `SERPAPI_API_KEY is required but was empty` | No key reached the server. For the CLI, check that `.env` is **saved** and in the project folder. The extension ignores `.env` and uses its own settings |
+| `Timeout` error / `Tool call timed out` | SerpApi didn't answer in time. `TASK_TIMEOUT` (default 50 s) covers one retry; keep it above `2 × REQUEST_TIMEOUT + 1` and below your client's ~60 s tool limit |
+| `LLM analysis failed … (ClientError: … API key not valid …)` | The Gemini key is invalid. Clear `GOOGLE_API_KEY`; the built-in classifier handles routing without it |
 | Follow-ups like "compare them" don't resolve | Use the same `session_id` for every call. History lives in the server process and resets when it restarts. |
 | `Persistent memory requested but unavailable` | `OBSIDIAN_VAULT_PATH` isn't set or doesn't exist. Research still works without it. |
-| Logs | Server logs go to stderr (in Claude Desktop: `~/Library/Logs/Claude/mcp-server-*.log`). API keys are never logged. |
+| Logs | Server logs go to stderr (in Claude Desktop: `~/Library/Logs/Claude/mcp-server-*.log`). Each failure line includes its reason. API keys are never logged, and `api_key=`/`key=` values are masked. |
 
 ## 🧪 Testing
 
 ```bash
-uv run pytest -q          # 196 tests, fully mocked (no API key needed)
+uv run pytest -q          # 201 tests, fully mocked (no API key needed)
 uv run mypy src/research_router
 ```
 

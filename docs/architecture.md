@@ -56,7 +56,7 @@ research(query, context_budget?, session_id?, use_memory?, save_to_memory?, debu
 | `context/manager.py` | Per-session turn history (LRU-bounded, compact evidence only) and reference resolution. Produces a `ResolvedContext` (`current_task`, `previous_task`, `entities`, `previous_results`, `user_intent`, `required_context`, `needs_search`). Only the relevant slice of history is used. |
 | `agent/task_planner.py` | Builds the internal `ExecutionPlan` (`intent`, `tasks[{id, task, tool, engine, query, depends_on}]`, `parallelizable`). Splits a query only when the parts need different tools, the later part has no subject of its own ("…and their implementations"), or the user explicitly chains requests. Identical searches are merged. |
 | `agent/runner.py` | Wave-based execution. Independent tasks run concurrently (bounded by `MAX_CONCURRENT_SEARCHES`), and dependent tasks run in later waves. Each call has a timeout (`TASK_TIMEOUT`) and uses the cache. Deep-research angle searches run only if the primary search returned too few relevant results. A failed or empty specialist engine is retried once on web search. |
-| `context/reducer.py` | Deterministic reduction: clean HTML and boilerplate → dedup by normalised URL, title and near-duplicate text (3-gram Jaccard) → BM25-style relevance with a freshness bonus → filter (keeping a minimum per task) → extract the relevant or numeric sentences → compress step by step only while over budget (shorter claims, compact fields, then drop the lowest-value items from the most-represented task). |
+| `context/reducer.py` | Deterministic reduction: clean HTML and boilerplate → dedup by normalised URL, title and near-duplicate text (3-gram Jaccard) → relevance (query coverage, with IDF as a tie-breaker, a title bonus and a freshness bonus) → filter (keeping a minimum per task) → extract the relevant or numeric sentences → compress step by step only while over budget (shorter claims, compact fields, then drop the lowest-value items from the most-represented task). |
 | `context/evidence.py` | `Evidence{claim, source{title, url, date, publisher}, relevance_score, source_type, recorded_at}`. Provenance survives every compression step. |
 | `context/tokens.py` | Token estimation: `tiktoken` if installed, otherwise a conservative character/word heuristic. It never raises. |
 | `memory/obsidian.py` | Optional vault read/write. Scans only `<vault>/Research/`, bounded by file count and bytes per file, and returns the best passages. Writes are atomic, and paths are sanitised and confined to the research folder. |
@@ -94,12 +94,13 @@ Old information is never presented as newly retrieved.
 | Failure | Behaviour |
 |---------|-----------|
 | One engine errors | Recorded in `errors`; other tasks continue; a specialist engine falls back to web search once (not for auth or rate-limit errors) |
-| Timeout | Per-call `Timeout` error; the request still returns |
-| SerpApi auth error | `SerpApiAuthError`, including SerpApi's own reason (never the key) |
+| Timeout | Per-call `Timeout` error; the request still returns. `TASK_TIMEOUT` (50 s) leaves room for one SerpApi client retry (`REQUEST_TIMEOUT` 20 s + backoff) and stays under the ~60 s tool timeout MCP clients commonly use |
+| SerpApi auth error | `SerpApiAuthError` with SerpApi's own reason plus a masked description of the key received (length, last 4 characters). It flags a still-encrypted value from the MCP host, a Google key in the SerpApi field, or a non-64-hex value. No expansions or fallbacks follow, since they would fail the same way. A startup warning reports the same format problems |
+| Rate limit (429) | Not retried; no expansions or fallbacks |
 | Malformed results | Skipped during normalisation/reduction |
 | Token estimation failure | Falls back to the heuristic, then to a length bound |
 | Reducer failure | Truncation fallback in rank order (`fallback: true` in stats) |
-| LLM unavailable/fails | Deterministic classifier result is used |
+| LLM unavailable/fails | Deterministic classifier result is used; the log line includes the reason (e.g. `API key not valid`) |
 | Obsidian not configured / missing / unreadable / write fails | Research continues; a warning is added to the response |
 
 ## Key Design Decisions
@@ -110,4 +111,5 @@ Old information is never presented as newly retrieved.
 - **Deterministic reduction.** No LLM calls in the reduction path, so it's fast, cheap and testable.
 - **Memory is an enhancement.** It is never a single point of failure.
 - **Measured, not claimed.** Every metric is recorded during execution; `--compare` measures both pipelines on the same query.
-- **stdio safety.** Logs go to stderr, and HTTP request logging (which would include the API key in URLs) is suppressed.
+- **stdio safety.** Logs go to stderr (stdout is the MCP JSON-RPC channel) and aren't duplicated through the MCP SDK's root handler. HTTP request logging, which would include the API key in URLs, is suppressed, and any `api_key=`/`key=`/`token=` text in a log line is masked.
+- **Relevance favours coverage.** Results are scored mainly on how much of the query they cover. Term rarity (IDF) only breaks ties, because core topic words appear in every on-topic result and must not count against them.
