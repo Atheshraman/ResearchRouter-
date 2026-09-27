@@ -32,6 +32,7 @@
     "env": {
       "SERPAPI_API_KEY": "${user_config.serpapi_api_key}",
       "GOOGLE_API_KEY": "${user_config.google_api_key}",
+      "OBSIDIAN_VAULT_PATH": "${user_config.obsidian_vault_path}",
       "LLM_PROVIDER": "gemini",
       "LLM_MODEL": "gemini-2.5-flash"
     }
@@ -48,9 +49,15 @@
     "google_api_key": {
       "type": "string",
       "title": "Google Gemini API Key",
-      "description": "API key used by Gemini for research intent classification.",
+      "description": "Optional. Used by Gemini to classify ambiguous queries; without it, built-in rules are used.",
       "sensitive": true,
-      "required": true
+      "required": false
+    },
+    "obsidian_vault_path": {
+      "type": "directory",
+      "title": "Obsidian Vault (optional)",
+      "description": "Optional. Vault folder for persistent research memory (notes go in Research/).",
+      "required": false
     }
   }
 }

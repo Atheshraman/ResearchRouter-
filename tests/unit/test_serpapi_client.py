@@ -92,6 +92,17 @@ class TestErrorHandling:
         await client.close()
 
     @respx.mock
+    async def test_auth_error_includes_serpapi_reason_not_key(self) -> None:
+        respx.get(_BASE_URL).mock(
+            return_value=httpx.Response(401, json={"error": "Invalid API key."})
+        )
+        client = _client()
+        with pytest.raises(SerpApiAuthError, match="Invalid API key") as exc:
+            await client.search({"engine": "google", "q": "test"})
+        assert FAKE_KEY not in str(exc.value)
+        await client.close()
+
+    @respx.mock
     async def test_auth_error_403(self) -> None:
         respx.get(_BASE_URL).mock(return_value=httpx.Response(403, text="Forbidden"))
         client = _client()

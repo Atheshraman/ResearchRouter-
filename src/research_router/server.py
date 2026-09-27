@@ -51,12 +51,19 @@ def create_mcp_server() -> MCPServer:
             "the system automatically determines the search domain (news, academic, "
             "jobs, shopping, places, or general web), selects the right SerpApi "
             "engine, and returns normalised results.\n\n"
+            "Multi-part requests are decomposed and run in parallel, follow-ups such "
+            "as 'compare them' or 'the second approach' are resolved against earlier "
+            "turns in the same session_id, and results are deduplicated, ranked and "
+            "compressed to fit context_budget (estimated tokens). Evidence keeps its "
+            "title/url/date; 'memory' and 'previous_context' sections are clearly "
+            "labelled as older information.\n\n"
             "Examples:\n"
             "- 'Latest AI news'\n"
             "- 'Research papers about RAG hallucination'\n"
+            "- 'Find recent RAG papers and their GitHub implementations'\n"
+            "- 'What about the second approach?' (follow-up)\n"
+            "- 'Compare this with my previous RAG research' (uses saved notes if configured)\n"
             "- 'AI internships in Chennai posted this week'\n"
-            "- 'RTX laptops under ₹90000'\n"
-            "- 'Best cafes near Chennai airport'\n"
         ),
     )
     async def research(
@@ -64,11 +71,25 @@ def create_mcp_server() -> MCPServer:
         max_results: int = 10,
         depth: str = "standard",
         include_sources: bool = True,
+        context_budget: int | None = None,
+        session_id: str = "default",
+        use_memory: bool = True,
+        save_to_memory: bool | None = None,
+        debug: bool = False,
     ) -> str:
         """Execute an intelligent research query."""
         router = _get_router()
         try:
-            result = await router.research(query, max_results=max_results, depth=depth)
+            result = await router.research(
+                query,
+                max_results=max_results,
+                depth=depth,
+                context_budget=context_budget,
+                debug=debug,
+                session_id=session_id,
+                use_memory=use_memory,
+                save_to_memory=save_to_memory,
+            )
             if not include_sources:
                 result.pop("sources", None)
             return json.dumps(result, indent=2, default=str)
@@ -86,11 +107,11 @@ def create_mcp_server() -> MCPServer:
             "entities, selected engine, and generated search plan."
         ),
     )
-    async def explain_research_plan(query: str) -> str:
+    async def explain_research_plan(query: str, session_id: str = "default") -> str:
         """Explain how a query would be routed."""
         router = _get_router()
         try:
-            explanation = await router.explain(query)
+            explanation = await router.explain(query, session_id=session_id)
             return json.dumps(explanation, indent=2, default=str)
         except ValueError as exc:
             return json.dumps({"error": str(exc)})

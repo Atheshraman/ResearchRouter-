@@ -1,18 +1,20 @@
 # Configuration
 
-All configuration is done through environment variables or a `.env` file.
+All configuration is done through environment variables or a `.env` file. When the server is installed as a Claude Desktop extension (`.mcpb`), the extension settings screen fills in `SERPAPI_API_KEY`, `GOOGLE_API_KEY` and `OBSIDIAN_VAULT_PATH`.
+
+Surrounding whitespace and quotes are removed from keys and paths, and an optional extension setting left blank (an unfilled `${user_config.…}` placeholder) is treated as unset.
 
 ## Required
 
 | Variable | Description |
 |----------|-------------|
-| `SERPAPI_API_KEY` | Your SerpApi API key |
-| `GOOGLE_API_KEY` | Google AI API key (for Gemini LLM) |
+| `SERPAPI_API_KEY` | Your SerpApi API key ([manage-api-key](https://serpapi.com/manage-api-key)) |
 
-## Optional
+## Core
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `GOOGLE_API_KEY` | *(empty)* | Optional Gemini key. Only used when the built-in classifier is unsure; without it, the classifier result is used |
 | `LLM_PROVIDER` | `gemini` | LLM provider (`gemini` or `ollama`) |
 | `LLM_MODEL` | `gemini-2.5-flash` | Model name |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
@@ -25,4 +27,35 @@ All configuration is done through environment variables or a `.env` file.
 | `CACHE_ENABLED` | `true` | Enable in-memory result cache |
 | `CACHE_TTL` | `300` | Cache TTL in seconds |
 | `CLASSIFIER_CONFIDENCE_THRESHOLD` | `0.75` | Min confidence for deterministic classification |
-| `LOG_LEVEL` | `INFO` | Logging level |
+| `LOG_LEVEL` | `INFO` | Logging level. Logs go to **stderr** (stdout is the MCP channel); HTTP request URLs, which contain the API key, are never logged |
+
+## Context-aware agent
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AGENT_MODE` | `true` | `false` restores the original single-plan pipeline and response shape |
+| `CONTEXT_BUDGET` | `4000` | Default output budget (estimated tokens) for one `research` response; callers can override per call with `context_budget` (200–100000) |
+| `TASK_TIMEOUT` | `30` | Timeout (seconds) for each individual tool call |
+| `ADAPTIVE_EXPANSION` | `true` | Deep research runs its extra angle searches only when the primary search returns too few relevant results |
+| `SESSION_MAX_TURNS` | `10` | Turns remembered per `session_id` for follow-up questions (in-process only) |
+| `MAX_TASKS_PER_REQUEST` | `4` | Max independent sub-tasks a query is decomposed into |
+
+The budget is an **output** budget. The server cannot see the calling LLM's
+context window, so it guarantees only that its own response stays within the
+estimate. Tokens are estimated with `tiktoken` if it is installed, otherwise
+with a conservative character/word heuristic.
+
+## Obsidian memory (optional)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `OBSIDIAN_VAULT_PATH` | *(empty)* | Absolute path to a vault. Empty disables persistent memory |
+| `OBSIDIAN_RESEARCH_FOLDER` | `Research` | Folder inside the vault that is read and written; nothing else in the vault is scanned |
+| `OBSIDIAN_AUTO_SAVE` | `false` | Save every research result; otherwise pass `save_to_memory=true` per call |
+| `MEMORY_MAX_NOTES` | `3` | Max notes recalled per query (only their best-matching passages are returned) |
+
+Notes are written to `Research/<Topic>/<Subtopic>.md` (for example
+`Research/RAG/Hallucination.md`), each with YAML frontmatter, one dated
+`## Session …` section per save, cited findings, sources, tags and
+`[[links]]` to related notes. If the vault is missing or unreadable, research
+continues without memory and the response includes a warning.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,8 +49,44 @@ class Settings(BaseSettings):
     # ── Classifier ────────────────────────────────────────────────────
     classifier_confidence_threshold: float = Field(default=0.75, ge=0.0, le=1.0)
 
+    # ── Context-aware agent ───────────────────────────────────────────
+    agent_mode: bool = Field(
+        default=True, description="False restores the original single-plan pipeline."
+    )
+    context_budget: int = Field(
+        default=4000,
+        ge=200,
+        le=100_000,
+        description="Default output context budget (estimated tokens) per research call.",
+    )
+    task_timeout: float = Field(default=30.0, gt=0, le=300, description="Per tool-call timeout.")
+    adaptive_expansion: bool = Field(
+        default=True, description="Run deep-research angle searches only when needed."
+    )
+    session_max_turns: int = Field(default=10, ge=1, le=100)
+    max_tasks_per_request: int = Field(default=4, ge=1, le=10)
+
+    # ── Obsidian memory (optional) ────────────────────────────────────
+    obsidian_vault_path: str = Field(default="", description="Empty disables persistent memory.")
+    obsidian_research_folder: str = Field(default="Research")
+    obsidian_auto_save: bool = Field(default=False)
+    memory_max_notes: int = Field(default=3, ge=1, le=20)
+
     # ── Logging ───────────────────────────────────────────────────────
     log_level: str = Field(default="INFO")
+
+    @field_validator("serpapi_api_key", "google_api_key", "obsidian_vault_path", mode="before")
+    @classmethod
+    def _clean_secret_or_path(cls, value: object) -> object:
+        """Trim pasted whitespace; treat unfilled ``${user_config.*}`` placeholders as unset.
+
+        MCP bundle hosts substitute user settings into env vars; an optional
+        setting the user left blank can arrive as the literal placeholder.
+        """
+        if not isinstance(value, str):
+            return value
+        value = value.strip().strip('"').strip("'").strip()
+        return "" if value.startswith("${") and value.endswith("}") else value
 
 
 def get_settings() -> Settings:

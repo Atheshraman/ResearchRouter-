@@ -146,8 +146,10 @@ class SerpApiClient:
         status = response.status_code
 
         if status in (401, 403):
+            detail = _error_detail(response)
             raise SerpApiAuthError(
-                "Authentication failed — check SERPAPI_API_KEY.",
+                "Authentication failed — check SERPAPI_API_KEY"
+                + (f" (SerpApi says: {detail})" if detail else "."),
                 status_code=status,
             )
         if status == 429:
@@ -176,3 +178,13 @@ class SerpApiClient:
             raise SerpApiResponseError(f"SerpApi error: {data['error']}")
 
         return data
+
+
+def _error_detail(response: httpx.Response) -> str:
+    """SerpApi's own explanation from an error body (never includes the key)."""
+    try:
+        body = response.json()
+        detail = str(body.get("error", "")) if isinstance(body, dict) else ""
+    except Exception:
+        detail = response.text
+    return detail.strip()[:200]

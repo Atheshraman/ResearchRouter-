@@ -37,6 +37,7 @@ _SIGNALS: dict[ResearchDomain, list[tuple[re.Pattern[str], float]]] = {
     ],
     ResearchDomain.ACADEMIC: [
         (re.compile(r"\b(research paper|research papers|journal|publication)\b", re.I), 0.45),
+        (re.compile(r"\b(papers?|preprints?|surveys?)\b", re.I), 0.35),
         (re.compile(r"\b(study|studies|findings|analysis)\b", re.I), 0.25),
         (re.compile(r"\b(scholar|scholarly|academic|peer.?review\w*)\b", re.I), 0.40),
         (re.compile(r"\b(thesis|dissertation|conference paper)\b", re.I), 0.40),

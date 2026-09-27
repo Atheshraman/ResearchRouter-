@@ -62,6 +62,17 @@ class TestSettings:
         with pytest.raises(Exception):
             Settings(max_results=0, _env_file=None)  # type: ignore[call-arg]
 
+    def test_keys_trimmed_and_placeholders_ignored(self) -> None:
+        s = Settings(
+            serpapi_api_key="  sk-test\n",
+            google_api_key="${user_config.google_api_key}",
+            obsidian_vault_path="${user_config.obsidian_vault_path}",
+            _env_file=None,  # type: ignore[call-arg]
+        )
+        assert s.serpapi_api_key == "sk-test"
+        assert s.google_api_key == ""
+        assert s.obsidian_vault_path == ""
+
     def test_get_settings_returns_instance(self) -> None:
         s = get_settings()
         assert isinstance(s, Settings)
@@ -74,6 +85,13 @@ class TestLogging:
     def test_get_logger(self) -> None:
         log = get_logger("test_logger")
         assert log.name == "test_logger"
+
+    def test_logs_never_go_to_stdout(self) -> None:
+        # stdout is the MCP JSON-RPC channel in stdio mode
+        import sys
+
+        log = get_logger("test_stdout_guard")
+        assert all(getattr(h, "stream", None) is not sys.stdout for h in log.handlers)
 
     def test_generate_request_id_uniqueness(self) -> None:
         ids = {generate_request_id() for _ in range(100)}

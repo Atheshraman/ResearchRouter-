@@ -103,6 +103,14 @@ class ResearchExecutor:
 
         return response
 
+    async def run_plan(self, plan: SearchPlan) -> tuple[list[ResearchResult], list[SearchError]]:
+        """Run a single plan (ignoring ``sub_queries``) and return raw results.
+
+        Used by the context-aware agent, which does its own cross-task
+        dedup/ranking/reduction instead of the per-plan pipeline.
+        """
+        return await self._run_single(plan)
+
     # ── single search ─────────────────────────────────────────────
 
     async def _run_single(self, plan: SearchPlan) -> tuple[list[ResearchResult], list[SearchError]]:
