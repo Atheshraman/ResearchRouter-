@@ -93,6 +93,23 @@ class TestLogging:
         log = get_logger("test_stdout_guard")
         assert all(getattr(h, "stream", None) is not sys.stdout for h in log.handlers)
 
+    def test_formatter_shows_failure_reason_and_masks_keys(self) -> None:
+        import logging
+
+        from research_router.utils.logging import StructuredFormatter
+
+        try:
+            raise ValueError("API key not valid. url=https://x?api_key=abc123&q=1")
+        except ValueError:
+            import sys
+
+            record = logging.LogRecord(
+                "t", logging.WARNING, __file__, 1, "LLM failed", None, sys.exc_info()
+            )
+        line = StructuredFormatter().format(record)
+        assert "ValueError: API key not valid" in line
+        assert "abc123" not in line and "api_key=***" in line
+
     def test_generate_request_id_uniqueness(self) -> None:
         ids = {generate_request_id() for _ in range(100)}
         assert len(ids) == 100

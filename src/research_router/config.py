@@ -59,7 +59,16 @@ class Settings(BaseSettings):
         le=100_000,
         description="Default output context budget (estimated tokens) per research call.",
     )
-    task_timeout: float = Field(default=30.0, gt=0, le=300, description="Per tool-call timeout.")
+    task_timeout: float = Field(
+        default=50.0,
+        gt=0,
+        le=300,
+        description=(
+            "Per tool-call timeout including SerpApi retries. The default leaves room for "
+            "one retry (2 x REQUEST_TIMEOUT + backoff) while staying under the ~60 s tool "
+            "timeout MCP clients commonly use."
+        ),
+    )
     adaptive_expansion: bool = Field(
         default=True, description="Run deep-research angle searches only when needed."
     )

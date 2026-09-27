@@ -9,6 +9,7 @@ Provides a configured logger that:
 from __future__ import annotations
 
 import logging
+import re
 import sys
 import uuid
 from typing import Any
@@ -38,6 +39,9 @@ def _redact(data: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+_KEY_IN_TEXT_RE = re.compile(r"\b(api_key|key|token)=[^&\s'\"]+", re.I)
+
+
 class StructuredFormatter(logging.Formatter):
     """Emit log records as human-readable structured lines."""
 
@@ -48,7 +52,12 @@ class StructuredFormatter(logging.Formatter):
             safe = _redact(extra)
             pairs = " ".join(f"{k}={v}" for k, v in safe.items())
             base = f"{base}  [{pairs}]"
-        return base
+        if record.exc_info and record.exc_info[1] is not None:
+            # One-line reason instead of a silent failure (full tracebacks are noise here).
+            exc = record.exc_info[1]
+            reason = str(exc).splitlines()[0][:300] if str(exc) else ""
+            base = f"{base}  ({type(exc).__name__}: {reason})"
+        return _KEY_IN_TEXT_RE.sub(r"\1=***", base)
 
 
 # httpx logs every request URL at INFO, and SerpApi URLs carry ``api_key`` in
