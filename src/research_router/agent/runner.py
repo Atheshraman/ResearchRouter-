@@ -97,6 +97,8 @@ class TaskRunner:
     def _needs_expansion(self, o: TaskOutcome) -> bool:
         if not o.task.expansions:
             return False
+        if any(e.error_type in _NO_FALLBACK_ERRORS for e in o.errors):
+            return False  # bad key / rate limit: more calls would fail the same way
         if not self._adaptive:
             return True
         return _relevant_count(o.results, o.task.query) < o.task.plan.max_results

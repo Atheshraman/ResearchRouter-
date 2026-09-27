@@ -13,6 +13,7 @@ Responsibilities:
 from __future__ import annotations
 
 import asyncio
+import re
 from typing import Any
 
 import httpx
@@ -111,8 +112,15 @@ class SerpApiClient:
                 return await self._do_request(full_params)
             except SerpApiRateLimitError:
                 raise  # never retry 429
-            except SerpApiAuthError:
-                raise  # never retry auth errors
+            except SerpApiAuthError as exc:
+                # never retry auth errors; say which key arrived (masked) and why it may be wrong
+                hints = "; ".join(key_problems(self._api_key))
+                raise SerpApiAuthError(
+                    f"{exc} [key received: {describe_key(self._api_key)}"
+                    + (f" — {hints}" if hints else "")
+                    + "]",
+                    status_code=exc.status_code,
+                ) from exc
             except (SerpApiTimeoutError, SerpApiError) as exc:
                 last_exc = exc
                 if attempt < self._max_retries:
@@ -178,6 +186,31 @@ class SerpApiClient:
             raise SerpApiResponseError(f"SerpApi error: {data['error']}")
 
         return data
+
+
+_SERPAPI_KEY_RE = re.compile(r"[0-9a-f]{64}")
+
+
+def key_problems(key: str) -> list[str]:
+    """Known ways a configured key can be wrong, detectable without calling SerpApi."""
+    problems: list[str] = []
+    if key.startswith("__encrypted__"):
+        problems.append(
+            "the value is still encrypted — the MCP host (e.g. Claude Desktop) passed its "
+            "stored secret without decrypting it; re-enter the key in the extension settings "
+            "or update the host app"
+        )
+    elif key.startswith("AIza"):
+        problems.append("this looks like a Google/Gemini API key, not a SerpApi key")
+    elif not _SERPAPI_KEY_RE.fullmatch(key):
+        problems.append("SerpApi keys are 64 lowercase hex characters")
+    return problems
+
+
+def describe_key(key: str) -> str:
+    """Masked description safe for logs: length and last 4 characters only."""
+    tail = key[-4:] if len(key) >= 12 else "?"
+    return f"{len(key)} chars, ending …{tail}"
 
 
 def _error_detail(response: httpx.Response) -> str:

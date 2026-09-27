@@ -34,7 +34,7 @@ from research_router.research.executor import ResearchExecutor
 from research_router.router.classifier import QueryClassifier
 from research_router.router.intent import IntentAnalyser
 from research_router.router.planner import ResearchPlanner
-from research_router.serpapi.client import SerpApiClient
+from research_router.serpapi.client import SerpApiClient, describe_key, key_problems
 from research_router.utils.logging import get_logger
 from research_router.utils.validation import (
     validate_context_budget,
@@ -60,6 +60,14 @@ class ResearchRouter:
             timeout=settings.request_timeout,
             max_retries=settings.max_retries,
         )
+
+        problems = key_problems(settings.serpapi_api_key)
+        if problems:
+            logger.warning(
+                "SERPAPI_API_KEY looks wrong (%s): %s",
+                describe_key(settings.serpapi_api_key),
+                "; ".join(problems),
+            )
 
         # Engine registry
         self._registry = EngineRegistry()

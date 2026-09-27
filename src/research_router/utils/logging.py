@@ -65,6 +65,8 @@ def get_logger(name: str, level: str = "INFO") -> logging.Logger:
     logger = logging.getLogger(name)
     if not logger.handlers:
         handler = logging.StreamHandler(sys.stderr)
+        # The MCP SDK installs its own root handler; don't print every line twice.
+        logger.propagate = False
         handler.setFormatter(StructuredFormatter())
         logger.addHandler(handler)
     logger.setLevel(getattr(logging, level.upper(), logging.INFO))

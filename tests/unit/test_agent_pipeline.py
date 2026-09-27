@@ -14,7 +14,7 @@ from research_router.config import Settings
 from research_router.context.tokens import estimate_tokens
 from research_router.mcp_tools.tools import ResearchRouter
 from research_router.models.intent import ResearchDepth
-from research_router.serpapi.exceptions import SerpApiError
+from research_router.serpapi.exceptions import SerpApiAuthError, SerpApiError
 
 FIXTURES = Path(__file__).parent.parent / "fixtures"
 _FIXTURE_FOR = {
@@ -127,6 +127,19 @@ class TestExecution:
         assert out["errors"][0]["engine"] == "google_scholar"
         assert out["total_results"] > 0
         assert out["debug"]["metrics"]["fallback_calls"] == 1
+
+    async def test_auth_failure_stops_further_calls(self) -> None:
+        fake = FakeSerpApi()
+        router = _router(fake)
+
+        async def rejected(params: dict[str, Any]) -> dict[str, Any]:
+            fake.calls.append((params["engine"], str(params.get("q"))))
+            raise SerpApiAuthError("Authentication failed", status_code=401)
+
+        router._serpapi.search = rejected  # type: ignore[method-assign]
+        out = await router.research("RAG hallucination research papers", depth="deep")
+        assert len(fake.calls) == 1, "no deep-research expansions or fallback after a bad key"
+        assert out["errors"][0]["error_type"] == "SerpApiAuthError"
 
     async def test_timeout_is_reported_not_raised(self) -> None:
         fake = FakeSerpApi(delay=0.5)

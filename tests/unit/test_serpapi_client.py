@@ -6,7 +6,12 @@ import httpx
 import pytest
 import respx
 
-from research_router.serpapi.client import _BASE_URL, SerpApiClient
+from research_router.serpapi.client import (
+    _BASE_URL,
+    SerpApiClient,
+    describe_key,
+    key_problems,
+)
 from research_router.serpapi.exceptions import (
     SerpApiAuthError,
     SerpApiError,
@@ -101,6 +106,23 @@ class TestErrorHandling:
             await client.search({"engine": "google", "q": "test"})
         assert FAKE_KEY not in str(exc.value)
         await client.close()
+
+    @respx.mock
+    async def test_auth_error_describes_received_key_masked(self) -> None:
+        respx.get(_BASE_URL).mock(return_value=httpx.Response(401, json={"error": "Invalid"}))
+        encrypted = "__encrypted__:" + "A" * 92
+        client = SerpApiClient(api_key=encrypted, max_retries=0)
+        with pytest.raises(SerpApiAuthError, match="still encrypted") as exc:
+            await client.search({"engine": "google", "q": "test"})
+        assert "106 chars" in str(exc.value) and encrypted not in str(exc.value)
+        await client.close()
+
+    def test_key_problems(self) -> None:
+        assert key_problems("a" * 64) == []
+        assert "Google" in key_problems("AIza" + "x" * 35)[0]
+        assert "64" in key_problems("short-key")[0]
+        assert "still encrypted" in key_problems("__encrypted__:abc")[0]
+        assert describe_key("0123456789abcdef") == "16 chars, ending …cdef"
 
     @respx.mock
     async def test_auth_error_403(self) -> None:
