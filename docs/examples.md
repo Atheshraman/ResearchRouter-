@@ -133,3 +133,16 @@ uv run research-router --compare "RAG hallucination mitigation techniques"
 ```
 
 This prints measured averages for the legacy pipeline and the context-aware pipeline on the same query: tool calls, parallel calls, results, estimated tokens and execution time.
+
+Live output for that query:
+
+```text
+metric                          legacy     agent
+tool calls                         1.0       1.0
+raw results                        9.0       9.0
+results returned                   9.0       8.0
+result tokens (est.)           12668.0    1423.0
+whole response (est.)          12792.0    1662.0
+```
+
+In deep mode the legacy pipeline runs the query plus up to 4 angle searches every time (5 searches for multi-word queries). The agent runs the extra angles only if the first search returns too few relevant results. More live numbers are in the [README](../README.md#-measured-results-live-serpapi-run).

@@ -4,6 +4,14 @@ All configuration is done through environment variables or a `.env` file. When t
 
 Surrounding whitespace and quotes are removed from keys and paths, and an optional extension setting left blank (an unfilled `${user_config.…}` placeholder) is treated as unset.
 
+| Where you run it | Where settings come from |
+|---|---|
+| CLI (`uv run research-router …`) | `.env` in the project folder (save the file!), or shell environment variables |
+| Manual MCP config (`uv run --directory <project> …`) | The config's `env` block, then `.env` in that folder |
+| Claude Desktop extension (`.mcpb`) | The extension's settings screen only; `.env` is not read and is never packed into the bundle |
+
+Environment variables take precedence over `.env`. At startup the server logs a warning if `SERPAPI_API_KEY` doesn't look like a SerpApi key. The warning shows only the key's length and last 4 characters.
+
 ## Required
 
 | Variable | Description |
