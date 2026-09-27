@@ -35,7 +35,7 @@ Surrounding whitespace and quotes are removed from keys and paths, and an option
 |----------|---------|-------------|
 | `AGENT_MODE` | `true` | `false` restores the original single-plan pipeline and response shape |
 | `CONTEXT_BUDGET` | `4000` | Default output budget (estimated tokens) for one `research` response; callers can override per call with `context_budget` (200–100000) |
-| `TASK_TIMEOUT` | `30` | Timeout (seconds) for each individual tool call |
+| `TASK_TIMEOUT` | `50` | Timeout (seconds) for each tool call, including SerpApi retries. Keep it above `2 × REQUEST_TIMEOUT + 1` so a retry can finish, and below your MCP client's tool timeout (often ~60 s) |
 | `ADAPTIVE_EXPANSION` | `true` | Deep research runs its extra angle searches only when the primary search returns too few relevant results |
 | `SESSION_MAX_TURNS` | `10` | Turns remembered per `session_id` for follow-up questions (in-process only) |
 | `MAX_TASKS_PER_REQUEST` | `4` | Max independent sub-tasks a query is decomposed into |
