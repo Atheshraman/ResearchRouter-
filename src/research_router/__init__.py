@@ -1,3 +1,3 @@
 """ResearchRouter MCP — Intelligent research routing over SerpApi."""
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"

@@ -183,12 +183,18 @@ class SerpApiClient:
 
         # SerpApi sometimes returns errors inside the JSON body
         if "error" in data:
+            if _NO_RESULTS_RE.search(str(data["error"])):
+                # A valid search with zero hits, not a failure: don't retry, and let
+                # callers treat it as an empty result (engines read missing keys as []).
+                data.pop("error")
+                return data
             raise SerpApiResponseError(f"SerpApi error: {data['error']}")
 
         return data
 
 
 _SERPAPI_KEY_RE = re.compile(r"[0-9a-f]{64}")
+_NO_RESULTS_RE = re.compile(r"hasn't returned any results|no results", re.I)
 
 
 def key_problems(key: str) -> list[str]:

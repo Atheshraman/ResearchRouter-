@@ -116,7 +116,7 @@ curl "https://serpapi.com/account.json?api_key=YOUR_KEY"   # shows plan and sear
 ### Option A: install as a Claude Desktop extension (`.mcpb`)
 
 ```bash
-npx @anthropic-ai/mcpb pack . research-router-0.1.4.mcpb
+npx @anthropic-ai/mcpb pack . research-router-0.1.5.mcpb
 ```
 
 Double-click the `.mcpb` (or use Claude Desktop → Settings → Extensions → Install). The settings screen asks for your **SerpApi API key**. The **Gemini key** and **Obsidian vault** are optional; leave the Gemini field empty unless the key works.
@@ -328,12 +328,12 @@ How much the context shrinks depends on the engine. Scholar results are already 
 | `LLM analysis failed … (ClientError: … API key not valid …)` | The Gemini key is invalid. Clear `GOOGLE_API_KEY`; the built-in classifier handles routing without it |
 | Follow-ups like "compare them" don't resolve | Use the same `session_id` for every call. History lives in the server process and resets when it restarts. |
 | `Persistent memory requested but unavailable` | `OBSIDIAN_VAULT_PATH` isn't set or doesn't exist. Research still works without it. |
-| Logs | Server logs go to stderr (in Claude Desktop: `~/Library/Logs/Claude/mcp-server-*.log`). Each failure line includes its reason. API keys are never logged, and `api_key=`/`key=` values are masked. |
+| Logs / token counts | Server logs go to stderr (in Claude Desktop: `~/Library/Logs/Claude/mcp-server-*.log`). Every research call writes one summary line, e.g. `Research complete [tools=news_search tool_calls=1 results=100->10 tokens=16377->1075 reduction=93.4% time_ms=…]`. Each failure line includes its reason. API keys are never logged, and `api_key=`/`key=` values are masked. |
 
 ## 🧪 Testing
 
 ```bash
-uv run pytest -q          # 201 tests, fully mocked (no API key needed)
+uv run pytest -q          # 203 tests, fully mocked (no API key needed)
 uv run mypy src/research_router
 ```
 

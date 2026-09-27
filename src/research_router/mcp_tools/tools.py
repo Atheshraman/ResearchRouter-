@@ -9,7 +9,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from research_router.agent.metrics import MetricsAggregator, RequestMetrics
+from research_router.agent.metrics import (
+    MetricsAggregator,
+    RequestMetrics,
+    log_research_summary,
+)
 from research_router.agent.orchestrator import ResearchAgent
 from research_router.agent.runner import TaskRunner
 from research_router.agent.task_planner import TaskPlanner
@@ -239,6 +243,7 @@ class ResearchRouter:
         metrics.errors = len(result.get("errors", []))
         metrics.finish()
         self._metrics.record(metrics)
+        log_research_summary(str(result.get("query", "")), [str(result.get("engine", ""))], metrics)
 
     def metrics_summary(self) -> dict[str, Any]:
         """Average measured metrics per mode since the server started."""

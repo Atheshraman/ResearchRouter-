@@ -141,6 +141,27 @@ class TestExecution:
         assert len(fake.calls) == 1, "no deep-research expansions or fallback after a bad key"
         assert out["errors"][0]["error_type"] == "SerpApiAuthError"
 
+    async def test_summary_line_with_token_counts_is_logged(self) -> None:
+        import logging
+
+        from research_router.agent import metrics as metrics_mod
+        from research_router.utils.logging import StructuredFormatter
+
+        lines: list[str] = []
+
+        class Capture(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                lines.append(StructuredFormatter().format(record))
+
+        handler = Capture()
+        metrics_mod.logger.addHandler(handler)
+        try:
+            await _router(FakeSerpApi()).research("RAG hallucination research papers")
+        finally:
+            metrics_mod.logger.removeHandler(handler)
+        summary = next(line for line in lines if "Research complete" in line)
+        assert "tokens=" in summary and "reduction=" in summary and "tool_calls=1" in summary
+
     async def test_timeout_is_reported_not_raised(self) -> None:
         fake = FakeSerpApi(delay=0.5)
         router = _router(fake, task_timeout=0.05)

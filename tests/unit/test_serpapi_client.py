@@ -117,6 +117,19 @@ class TestErrorHandling:
         assert "106 chars" in str(exc.value) and encrypted not in str(exc.value)
         await client.close()
 
+    @respx.mock
+    async def test_no_results_is_empty_not_error_and_not_retried(self) -> None:
+        route = respx.get(_BASE_URL).mock(
+            return_value=httpx.Response(
+                200, json={"error": "Google hasn't returned any results for this query."}
+            )
+        )
+        client = SerpApiClient(api_key=FAKE_KEY, max_retries=2)
+        data = await client.search({"engine": "google_jobs", "q": "x"})
+        assert "error" not in data and data.get("jobs_results", []) == []
+        assert route.call_count == 1
+        await client.close()
+
     def test_key_problems(self) -> None:
         assert key_problems("a" * 64) == []
         assert "Google" in key_problems("AIza" + "x" * 35)[0]
