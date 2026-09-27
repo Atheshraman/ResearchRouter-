@@ -2,9 +2,9 @@
   "manifest_version": "0.4",
   "name": "research-router",
   "display_name": "ResearchRouter",
-  "version": "0.1.0",
-  "description": "An intelligent research-routing MCP server that automatically selects the appropriate SerpApi engine for natural-language research queries.",
-  "long_description": "ResearchRouter provides one intelligent research tool that automatically detects whether a query is about general web research, news, academic papers, jobs, shopping, or places, then routes the query to the appropriate SerpApi engine.",
+  "version": "0.1.1",
+  "description": "A context-aware research agent: one research tool that picks the right SerpApi engines, runs them in parallel, and returns compact, cited, token-budgeted context.",
+  "long_description": "ResearchRouter provides one intelligent research tool. It detects intent (web, news, academic papers, code, jobs, shopping, places), splits multi-part requests into parallel searches, resolves follow-ups such as 'compare them' or 'the second paper' from earlier results, and deduplicates, ranks and compresses results to a configurable token budget while keeping every source's title, URL and date. Optionally, it saves findings to an Obsidian vault and recalls them later, clearly labelled as older information.",
   "author": {
     "name": "Athesh Raman"
   },
