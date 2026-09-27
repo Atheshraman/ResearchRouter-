@@ -35,7 +35,7 @@ def create_mcp_server() -> MCPServer:
     """Build and return the configured MCP server."""
     mcp = MCPServer(
         "research-router",
-        version="0.1.2",
+        version="0.1.3",
         instructions=(
             "ResearchRouter MCP — One intelligent research tool.\n"
             "Use the 'research' tool to search across Google, News, Scholar, "

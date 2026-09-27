@@ -111,6 +111,27 @@ class TestReducer:
         assert {e.task_id for e in out.evidence} == {"t1", "t2"}
         assert len(out.evidence) == 2
 
+    def test_on_topic_results_kept_when_a_rare_query_term_is_missing(self) -> None:
+        # Every result matches the core topic ("RAG hallucination"); only one also
+        # mentions "evaluation". Rarity must not make the other nine look irrelevant.
+        topics = [
+            "retrieval", "hallucination", "grounding", "reranking", "citations",
+            "faithfulness", "evaluation", "chunking", "embeddings", "knowledge graphs",
+        ]  # fmt: skip
+        filler = "Large language models frequently generate fluent but unsupported statements."
+        items = [
+            _ev(
+                f"RAG {t} reduces hallucination by {10 + i}% on benchmark {i}. {filler}",
+                f"https://s{i}.org/{i}",
+                f"RAG hallucination and {t}: a study",
+                rank=i,
+            )
+            for i, t in enumerate(topics)
+        ]
+        query = "RAG hallucination mitigation techniques and evaluation"
+        out = ContextReducer().reduce(items, query, 5000)
+        assert out.stats.relevant == 10  # IDF-dominated scoring kept only 4
+
     def test_web_preferred_over_memory_duplicate(self) -> None:
         items = [
             _ev("Old note about RAG", "https://a.com", source_type=SourceType.MEMORY),

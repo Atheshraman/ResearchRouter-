@@ -271,17 +271,20 @@ class ContextReducer:
         titles = [set(tokenize(e.source.title or "")) for e in items]
         n = len(docs)
         df = Counter(t for d in docs for t in set(terms) & d)
-        weights = {
-            t: (0.5 if t in GENERIC_TERMS else 1.0) * (1.0 + math.log((n + 1) / (df[t] + 0.5)))
-            for t in terms
-        }
-        total = sum(weights.values()) or 1.0
+        # Plain weights measure how much of the query a result covers. Rarity (IDF)
+        # only breaks ties: core topic terms appear in *every* result, so an
+        # IDF-dominated score would rank on-topic results as irrelevant.
+        plain = {t: 0.5 if t in GENERIC_TERMS else 1.0 for t in terms}
+        rare = {t: plain[t] * (1.0 + math.log((n + 1) / (df[t] + 0.5))) for t in terms}
+        plain_total = sum(plain.values()) or 1.0
+        rare_total = sum(rare.values()) or 1.0
         cutoff = datetime.now(UTC) - timedelta(days=365)
 
         for e, doc, title in zip(items, docs, titles, strict=True):
-            coverage = sum(w for t, w in weights.items() if t in doc) / total
-            title_hit = sum(w for t, w in weights.items() if t in title) / total
-            score = 0.7 * coverage + 0.2 * title_hit
+            coverage = sum(w for t, w in plain.items() if t in doc) / plain_total
+            distinct = sum(w for t, w in rare.items() if t in doc) / rare_total
+            title_hit = sum(w for t, w in plain.items() if t in title) / plain_total
+            score = 0.55 * coverage + 0.15 * distinct + 0.2 * title_hit
             rank = e.metadata.get("rank")
             if isinstance(rank, int) and rank >= 0:
                 score += 0.1 / (1 + rank)  # engine's own ordering as a weak prior
