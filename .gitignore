@@ -39,3 +39,6 @@ htmlcov/
 
 # ─── Docker ────────────────────────
 .docker/
+
+# ─── MCP bundles ───────────────────
+*.mcpb
