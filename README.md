@@ -315,21 +315,6 @@ One session against the real SerpApi API used 6 searches, 5 of them billed; the 
 
 How much the context shrinks depends on the engine. Scholar results are already compact, while web and GitHub results carry a lot of extra data. Token counts are estimates. Timing comparisons are only fair on uncached queries, because SerpApi caches identical searches for a while.
 
-## 🛟 Troubleshooting
-
-| Symptom | Fix |
-|---------|-----|
-| `Authentication failed … (SerpApi says: …) [key received: N chars, ending …abcd …]` | SerpApi rejected the key the server received. The bracket describes that key (masked) and names the likely cause, as in the rows below. Check the key with `curl "https://serpapi.com/account.json?api_key=YOUR_KEY"` (free). |
-| `… — the value is still encrypted …` | The MCP host passed its stored secret without decrypting it. Re-enter the key in the extension settings, update Claude Desktop, or use the manual MCP config |
-| `… — this looks like a Google/Gemini API key …` | The keys are in the wrong fields; swap them |
-| `… — SerpApi keys are 64 lowercase hex characters` | The key is incomplete or has extra text; copy it again from serpapi.com/manage-api-key |
-| `key received: 0 chars` / `SERPAPI_API_KEY is required but was empty` | No key reached the server. For the CLI, check that `.env` is **saved** and in the project folder. The extension ignores `.env` and uses its own settings |
-| `Timeout` error / `Tool call timed out` | SerpApi didn't answer in time. `TASK_TIMEOUT` (default 50 s) covers one retry; keep it above `2 × REQUEST_TIMEOUT + 1` and below your client's ~60 s tool limit |
-| `LLM analysis failed … (ClientError: … API key not valid …)` | The Gemini key is invalid. Clear `GOOGLE_API_KEY`; the built-in classifier handles routing without it |
-| Follow-ups like "compare them" don't resolve | Use the same `session_id` for every call. History lives in the server process and resets when it restarts. |
-| `Persistent memory requested but unavailable` | `OBSIDIAN_VAULT_PATH` isn't set or doesn't exist. Research still works without it. |
-| Logs / token counts | Server logs go to stderr (in Claude Desktop: `~/Library/Logs/Claude/mcp-server-*.log`). Every research call writes one summary line, e.g. `Research complete [tools=news_search tool_calls=1 results=100->10 tokens=16377->1075 reduction=93.4% time_ms=…]`. Each failure line includes its reason. API keys are never logged, and `api_key=`/`key=` values are masked. |
-
 ## 🧪 Testing
 
 ```bash
