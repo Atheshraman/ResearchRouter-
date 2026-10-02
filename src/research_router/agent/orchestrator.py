@@ -43,7 +43,7 @@ MEMORY_LABEL = (
     "Cite with its recorded date."
 )
 CONTEXT_LABEL = "EARLIER IN THIS SESSION — results returned by a previous research turn."
-_ENVELOPE_RESERVE = 300  # tokens reserved for keys, labels and compact metrics
+_ENVELOPE_RESERVE = 100  # tokens reserved for keys, labels and compact metrics
 _MEMORY_SHARE = 0.25
 _CONTEXT_SHARE = 0.30
 _COMPACT_METRIC_KEYS = (
@@ -355,10 +355,14 @@ class ResearchAgent:
             response.get("previous_context", {}).get("evidence", []),
             response.get("memory", {}).get("evidence", []),
         ]
+        preserve_minimum = budget <= _ENVELOPE_RESERVE * 2
         while estimate_tokens(response) > budget:
-            target = next((s for s in sections if s), None)
+            target = next(
+                (s for s in sections if len(s) > 1 or (s and not preserve_minimum)),
+                None,
+            )
             if target is None:
-                break  # only metadata left; a tiny budget cannot be met further
+                break  # preserve one item per section when the envelope cannot fit
             target.pop()
         response["total_results"] = len(response["results"])
 

@@ -101,6 +101,13 @@ class TestReducer:
         out = ContextReducer().reduce(items, "RAG hallucination mitigation", 150)
         assert out.evidence[0].source.url == "https://key.com"
 
+    def test_keeps_one_evidence_item_when_budget_is_too_small(self) -> None:
+        items = [
+            _ev("RAG hallucination mitigation with reranking", "https://key.com", "RAG")
+        ]
+        out = ContextReducer().reduce(items, "RAG hallucination mitigation", 1)
+        assert len(out.evidence) == 1
+
     def test_low_relevance_removed_but_each_task_keeps_minimum(self) -> None:
         items = [
             _ev("RAG hallucination benchmark results", "https://a.com", task="t1"),

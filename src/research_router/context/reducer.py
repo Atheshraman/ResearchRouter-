@@ -174,7 +174,7 @@ class ContextReducer:
             tokens = self._measure(items, level)
             stats.steps.append(f"compress_level_{level}")
 
-        while tokens > budget and items:
+        while tokens > budget and len(items) > 1:
             items = self._drop_one(items)
             stats.dropped_for_budget += 1
             tokens = self._measure(items, level)

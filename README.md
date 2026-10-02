@@ -22,7 +22,7 @@ ResearchRouter keeps the interface to **one tool** and does the work internally:
 | **Parallel execution** | Runs independent tasks at the same time; dependent steps (fallbacks, extra searches) run after them |
 | **Context-aware follow-ups** | Resolves "those papers", "the second approach", "compare them" and "continue my research" against the session |
 | **Context reducer** | Normalises, deduplicates, ranks and filters results, extracts the key sentences, and compresses only as much as needed |
-| **Token budget** | Keeps each response within a configurable estimated-token budget (`context_budget`) |
+| **Token budget** | Targets a configurable estimated-token budget (`context_budget`) while preserving useful evidence |
 | **Source-aware evidence** | Every claim keeps its title, URL, date and publisher, even after compression |
 | **Persistent memory (optional)** | Saves findings to an Obsidian vault and recalls relevant notes later, labelled as old information |
 | **Observability** | Debug report, measured per-request metrics, and a side-by-side comparison with the original pipeline |
@@ -163,6 +163,15 @@ research(
 
 Every argument except `query` is optional, so existing callers keep working.
 
+`context_budget` is an estimated token budget for the complete research response,
+including metadata and section labels. The agent reserves a small portion of the
+budget for that response envelope, so very small values leave little room for
+evidence. Use a budget of at least `800` for normal research responses; `200` is
+useful only for deliberately tiny outputs. The reducer progressively deduplicates,
+filters, extracts and compresses evidence, then drops the lowest-ranked items only
+when necessary. It preserves the highest-ranked evidence item when possible, even
+under extreme budget pressure.
+
 ### A research conversation
 
 ```text
@@ -256,6 +265,12 @@ Obsidian memory used: 0 notes
 ```
 
 With `debug=True` the response also includes the internal execution plan, the resolved context, and reduction statistics for each section. Otherwise the plan stays internal.
+
+The reduction statistics show `raw_results`, `deduplicated_results`,
+`relevant_results`, `final_evidence`, `output_context_tokens`,
+`compression_level`, `dropped_for_budget`, and the reduction `steps`. These are
+useful for tuning `context_budget`: if `final_evidence` is zero, increase the
+budget before reducing `max_results` further.
 
 ## 🗂️ Persistent research memory (Obsidian)
 
