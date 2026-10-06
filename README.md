@@ -1,8 +1,9 @@
 # ResearchRouter MCP
 
 > A context-aware, memory-aware research agent for LLMs, exposed as **one** MCP tool: `research(query)`.
-
+<small>
  use this link to connect the MCP Server:https://researchrouter.onrender.com/mcp
+</small> 
 ---
 
 ## 🎯 The Problem
