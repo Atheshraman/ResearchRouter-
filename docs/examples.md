@@ -25,9 +25,9 @@ Internal plan (shown only because `debug=True`):
 {
   "intent": "multi",
   "tasks": [
-    {"id": "t1", "task": "find_papers",          "tool": "academic_search", "engine": "google_scholar",
+    {"id": "t1", "task_id": "t1", "task": "find_papers",          "tool": "academic_search", "engine": "google_scholar",
      "query": "Find recent RAG papers", "parameters": {"date_range": "recent", "freshness": "recent"}},
-    {"id": "t2", "task": "find_implementations", "tool": "github_search",   "engine": "google",
+    {"id": "t2", "task_id": "t2", "task": "find_implementations", "tool": "github_search",   "engine": "google",
      "query": "rag implementations site:github.com"}
   ],
   "parallelizable": true
@@ -76,7 +76,7 @@ research("What did my previous RAG hallucination research find?")
 # {
 #   "label": "OLD MEMORY — recalled from saved research notes, not retrieved in this request. …",
 #   "notes": ["Research/RAG/Hallucination"],
-#   "evidence": [{"claim": "…", "url": "https://arxiv.org/abs/…",
+#   "evidence": [{"claim": null, "title": "A paper title", "url": "https://arxiv.org/abs/…",
 #                 "source_type": "memory", "recorded_at": "2026-09-27T15:31:34+00:00"}]
 # }
 
@@ -93,6 +93,33 @@ research("RAG hallucination mitigation", context_budget=1500)
 # The whole response (excluding `debug`) stays within ~1500 estimated tokens.
 # Compression escalates only as far as needed; the highest-relevance evidence is kept.
 ```
+
+For a multi-domain response, the flattened top-level results and task sections
+describe the same selected evidence:
+
+```jsonc
+{
+  "domain": "multi",
+  "engine": null,
+  "engines": ["google_scholar", "google_jobs", "google_news"],
+  "results": [
+    {"task_id": "t1", "domain": "academic", "engine": "google_scholar", "claim": null},
+    {"task_id": "t2", "domain": "jobs", "engine": "google_jobs", "title": "AI/ML Intern"},
+    {"task_id": "t3", "domain": "news", "engine": "google_news", "freshness_score": 0.71, "ranking_score": 0.63}
+  ],
+  "total_results": 3,
+  "tasks": [
+    {"task_id": "t1", "selected_results": 1},
+    {"task_id": "t2", "selected_results": 1},
+    {"task_id": "t3", "selected_results": 1}
+  ]
+}
+```
+
+The invariants are `total_results == len(results)` and
+`task.selected_results == len(task.results)`. `duplicates_removed` is reported
+as `raw_results - after_dedup`; it is zero when the search response contains no
+duplicates.
 
 Valid range: 200–100000. The default is `CONTEXT_BUDGET` (4000).
 

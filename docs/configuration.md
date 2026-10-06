@@ -55,6 +55,34 @@ approximation of Claude's tokenizer; installed as a dependency). If its
 encoding file can't be downloaded on first use (e.g. offline), a
 conservative character/word heuristic is used instead.
 
+## Response diagnostics
+
+Pass `debug=true` to `research` when investigating routing or evidence quality.
+The response then includes the execution plan, per-task status and timing,
+reduction statistics, and measured parallelism. Multi-domain responses retain
+both the flattened `results` view and task-specific `tasks` sections. The
+following invariants hold after budget enforcement:
+
+```text
+total_results == len(results)
+task.selected_results == len(task.results)
+duplicates_removed == raw_results - after_dedup
+```
+
+News queries with recency intent (`latest`, `recent`, `today`, `current`,
+`breaking`, and similar terms) expose `freshness_score` and `ranking_score` in
+evidence. Academic evidence keeps the original Scholar `snippet` and
+publication metadata when available; incomplete snippets produce `claim: null`.
+
+For local MCP Inspector validation:
+
+```powershell
+npx --yes @modelcontextprotocol/inspector --cli `
+	--cwd E:\SerpAPI\ResearchRouter- `
+	--method tools/list --format json `
+	E:\SerpAPI\ResearchRouter-\.venv\Scripts\python.exe -m research_router
+```
+
 ## Obsidian memory (optional)
 
 | Variable | Default | Description |

@@ -21,7 +21,8 @@ research(query, context_budget?, session_id?, use_memory?, save_to_memory?, debu
    ├─ TaskRunner ∥ Memory   independent tasks run concurrently; memory recall
    │                        runs alongside them
    │     └─ wave 2          adaptive expansion / fallback, only when needed
-   ├─ ContextReducer        normalise → dedup → rank → filter → extract
+     ├─ ContextReducer        normalise → task-aware dedup → score → filter
+     │                        → extract → compress → fair per-task selection
    │                        → adaptive compression (per section)
    ├─ Budget enforcement    web, earlier-session and memory sections share one
    │                        estimated-token budget
@@ -54,13 +55,19 @@ research(query, context_budget?, session_id?, use_memory?, save_to_memory?, debu
 | Module | Responsibility |
 |--------|----------------|
 | `context/manager.py` | Per-session turn history (LRU-bounded, compact evidence only) and reference resolution. Produces a `ResolvedContext` (`current_task`, `previous_task`, `entities`, `previous_results`, `user_intent`, `required_context`, `needs_search`). Only the relevant slice of history is used. |
-| `agent/task_planner.py` | Builds the internal `ExecutionPlan` (`intent`, `tasks[{id, task, tool, engine, query, depends_on}]`, `parallelizable`). Splits a query only when the parts need different tools, the later part has no subject of its own ("…and their implementations"), or the user explicitly chains requests. Identical searches are merged. |
-| `agent/runner.py` | Wave-based execution. Independent tasks run concurrently (bounded by `MAX_CONCURRENT_SEARCHES`), and dependent tasks run in later waves. Each call has a timeout (`TASK_TIMEOUT`) and uses the cache. Deep-research angle searches run only if the primary search returned too few relevant results. A failed or empty specialist engine is retried once on web search. |
-| `context/reducer.py` | Deterministic reduction: clean HTML and boilerplate → dedup by normalised URL, title and near-duplicate text (3-gram Jaccard) → relevance (query coverage, with IDF as a tie-breaker, a title bonus and a freshness bonus) → filter (keeping a minimum per task) → extract the relevant or numeric sentences → compress step by step only while over budget (shorter claims, compact fields, then drop the lowest-value items from the most-represented task). |
-| `context/evidence.py` | `Evidence{claim, source{title, url, date, publisher}, relevance_score, source_type, recorded_at}`. Provenance survives every compression step. |
+| `agent/task_planner.py` | Builds the internal `ExecutionPlan` (`intent`, `tasks[{id, task_id, tool, engine, query, depends_on}]`, `parallelizable`). Stable task IDs travel through execution and response assembly. |
+| `agent/runner.py` | Wave-based execution. Independent tasks run concurrently (bounded by `MAX_CONCURRENT_SEARCHES`), and dependent tasks run in later waves. Each call has a timeout, cache lookup, measured timing, and explicit `completed`, `empty`, or `failed` status. An empty Google Jobs response is reported as `empty` rather than silently falling back to web search. |
+| `context/reducer.py` | Deterministic reduction: clean HTML and boilerplate → task-aware URL/title/near-duplicate deduplication → semantic scoring → intent-aware news freshness scoring → filter and fair task cap → safe claim extraction → adaptive compression. News keeps separate semantic relevance, freshness, and final ranking scores. |
+| `context/evidence.py` | `Evidence{claim?, why_relevant?, source{title, url, date, publisher}, task_id, domain, engine, relevance_score, source_type, metadata}`. Scholar snippets and publication metadata survive compression; unreliable claims remain `null`. |
 | `context/tokens.py` | Token counting with `tiktoken` (`cl100k_base`), falling back to a conservative character/word heuristic if the encoding can't load. It never raises. |
 | `memory/obsidian.py` | Optional vault read/write. Scans only `<vault>/Research/`, bounded by file count and bytes per file, and returns the best passages. Writes are atomic, and paths are sanitised and confined to the research folder. |
 | `agent/metrics.py` | Per-request metrics, the debug report, and per-mode averages used by `--compare`. |
+
+For `debug=True`, multi-domain task entries include `task_id`, `domain`,
+`engine`, `status`, `execution_time_ms`, `raw_results`, and safe engine
+diagnostics when available. Google Jobs diagnostics include the request query,
+structured location, response keys, and `jobs_results_count`; credentials are
+never included.
 
 ## Data Flow Example
 
@@ -69,7 +76,7 @@ research(query, context_budget?, session_id?, use_memory?, save_to_memory?, debu
 1. **Turn 1.** No earlier references to resolve → `needs_search = true`.
 2. The planner splits at "and their": `t1` "Find recent RAG papers" → classifier *academic* → `google_scholar` (freshness filter). `t2` "RAG GitHub implementations" → code intent → `google` with `site:github.com`.
 3. The runner calls both engines concurrently; `parallel_tool_calls = 2`.
-4. The reducer merges the results, removes duplicates, ranks them against the query, and fits them into the budget.
+4. The reducer merges the results, removes task-local duplicates, ranks them against each task query, reserves minimum representation per successful task, and fits them into the budget.
 5. The turn is recorded (compact evidence only) and optionally saved to Obsidian.
 6. **Turn 2.** "compare them" contains a reference and no new topic → `needs_search = false`. The earlier results come back in `previous_context`, with 0 tool calls.
 
@@ -77,7 +84,7 @@ research(query, context_budget?, session_id?, use_memory?, save_to_memory?, debu
 
 | `source_type` | Where it appears | Meaning |
 |---|---|---|
-| `web` | `results` | Retrieved during this request |
+| `web` | `results` | Retrieved during this request; multi-domain items retain `task_id`, `domain`, and `engine` |
 | `context` | `previous_context.evidence` | Returned by an earlier turn in this session |
 | `memory` | `memory.evidence` (with `recorded_at` and the note path) | Recalled from saved notes; old information |
 
@@ -93,7 +100,7 @@ Old information is never presented as newly retrieved.
 
 | Failure | Behaviour |
 |---------|-----------|
-| One engine errors | Recorded in `errors`; other tasks continue; a specialist engine falls back to web search once (not for auth or rate-limit errors) |
+| One engine errors | Recorded in `errors`; other tasks continue. Valid zero-result searches are `empty`; API/transport errors are `failed` |
 | Timeout | Per-call `Timeout` error; the request still returns. `TASK_TIMEOUT` (50 s) leaves room for one SerpApi client retry (`REQUEST_TIMEOUT` 20 s + backoff) and stays under the ~60 s tool timeout MCP clients commonly use |
 | SerpApi auth error | `SerpApiAuthError` with SerpApi's own reason plus a masked description of the key received (length, last 4 characters). It flags a still-encrypted value from the MCP host, a Google key in the SerpApi field, or a non-64-hex value. No expansions or fallbacks follow, since they would fail the same way. A startup warning reports the same format problems |
 | Rate limit (429) | Not retried; no expansions or fallbacks |
@@ -113,3 +120,5 @@ Old information is never presented as newly retrieved.
 - **Measured, not claimed.** Every metric is recorded during execution; `--compare` measures both pipelines on the same query.
 - **stdio safety.** Logs go to stderr (stdout is the MCP JSON-RPC channel) and aren't duplicated through the MCP SDK's root handler. HTTP request logging, which would include the API key in URLs, is suppressed, and any `api_key=`/`key=`/`token=` text in a log line is masked.
 - **Relevance favours coverage.** Results are scored mainly on how much of the query they cover. Term rarity (IDF) only breaks ties, because core topic words appear in every on-topic result and must not count against them.
+- **News freshness is intent-aware.** Queries containing `latest`, `recent`, `today`, `current`, `newest`, `breaking`, or comparable time terms use a timezone-aware freshness decay; ordinary news queries remain relevance-focused.
+- **Evidence over invention.** A malformed or incomplete source snippet becomes `claim: null`; deterministic `why_relevant` text is derived from available title, snippet, metadata, and date fields without extra LLM calls.

@@ -2,8 +2,7 @@
 
 > A context-aware, memory-aware research agent for LLMs, exposed as **one** MCP tool: `research(query)`.
 
-**Built for the SerpApi India Hackathon 2026 (Open-Source Integrations Track)**
-
+ use this link to connect the MCP Server:https://researchrouter.onrender.com/mcp
 ---
 
 ## 🎯 The Problem
@@ -23,7 +22,7 @@ ResearchRouter keeps the interface to **one tool** and does the work internally:
 | **Context-aware follow-ups** | Resolves "those papers", "the second approach", "compare them" and "continue my research" against the session |
 | **Context reducer** | Normalises, deduplicates, ranks and filters results, extracts the key sentences, and compresses only as much as needed |
 | **Token budget** | Targets a configurable estimated-token budget (`context_budget`) while preserving useful evidence |
-| **Source-aware evidence** | Every claim keeps its title, URL, date and publisher, even after compression |
+| **Source-aware evidence** | Evidence keeps task provenance, title, URL, date and publisher, even after compression; unreliable claims remain `null` |
 | **Persistent memory (optional)** | Saves findings to an Obsidian vault and recalls relevant notes later, labelled as old information |
 | **Observability** | Debug report, measured per-request metrics, and a side-by-side comparison with the original pipeline |
 
@@ -197,14 +196,18 @@ The top-level keys are the same as the original response (`query`, `domain`, `en
   "query": "Recent research papers about RAG hallucination",
   "domain": "academic",
   "engine": "google_scholar",
-  "results": [                        // FRESH evidence from this request only
+  "results": [                        // FRESH flattened evidence from this request
     {
-      "claim": "RAG hallucination from Knowledge Conflict as a new research direction. Our work focuses on detecting RAG hallucinations …",
+      "claim": null,                  // null when the source snippet is incomplete
+      "snippet": "Clean original Scholar snippet when available",
       "title": "Redeep: Detecting hallucination in retrieval-augmented generation via mechanistic interpretability",
       "url": "https://proceedings.iclr.cc/paper_files/paper/2025/hash/7daf60e805e596c3bd1e843e72ea5560-Abstract-Conference.html",
       "relevance": 0.62,
       "source_type": "web",
-      "task": "t1"
+      "task_id": "t1",
+      "domain": "academic",
+      "engine": "google_scholar",
+      "why_relevant": "Relevant because it studies hallucination in retrieval-augmented generation systems."
     }
     // … 9 more
   ],
@@ -225,12 +228,39 @@ The top-level keys are the same as the original response (`query`, `domain`, `en
       "tool_calls": 1, "parallel_tool_calls": 1, "cache_hits": 0,
       "raw_results": 10, "final_evidence": 10,
       "input_tokens_estimated": 1953, "output_context_tokens": 1364,
-      "response_tokens": 1768, "compression_ratio": 0.302,
+      "response_tokens": 1768,
+      "reduction_ratio": 0.302, "remaining_ratio": 0.698,
+      "reduction_percent": 30.2, "remaining_percent": 69.8,
+      "duplicates_removed": 0,
       "memory_hits": 0, "execution_time_ms": 2310
     }
   }
 }
 ```
+
+For a multi-domain request, `engine` is `null`, `engines` lists every selected
+engine, and `tasks` preserves each task's selected evidence. The top-level
+`results` array is the flattened view of those task results:
+
+```jsonc
+{
+  "domain": "multi",
+  "engine": null,
+  "engines": ["google_scholar", "google_jobs", "google_news"],
+  "results": [/* flattened evidence; each item keeps task_id/domain/engine */],
+  "total_results": 3,
+  "tasks": [
+    {"task_id": "t1", "domain": "academic", "engine": "google_scholar", "selected_results": 1, "results": [/* selected evidence */]},
+    {"task_id": "t2", "domain": "jobs", "engine": "google_jobs", "selected_results": 1, "results": [/* selected evidence */]},
+    {"task_id": "t3", "domain": "news", "engine": "google_news", "selected_results": 1, "results": [/* selected evidence */]}
+  ]
+}
+```
+
+The response guarantees `total_results == len(results)` and
+`selected_results == len(task.results)`. With a recency query such as
+`latest MCP news`, news evidence also includes `freshness_score` and
+`ranking_score`; ordinary news queries remain relevance-focused.
 
 *(Real output from a live SerpApi run, trimmed to one result.)*
 
@@ -268,6 +298,7 @@ With `debug=True` the response also includes the internal execution plan, the re
 
 The reduction statistics show `raw_results`, `deduplicated_results`,
 `relevant_results`, `final_evidence`, `output_context_tokens`,
+`reduction_percent`, `remaining_percent`, `duplicates_removed`,
 `compression_level`, `dropped_for_budget`, and the reduction `steps`. These are
 useful for tuning `context_budget`: if `final_evidence` is zero, increase the
 budget before reducing `max_results` further.
@@ -333,9 +364,21 @@ How much the context shrinks depends on the engine. Scholar results are already 
 ## 🧪 Testing
 
 ```bash
-uv run pytest -q          # 203 tests, fully mocked (no API key needed)
+uv run pytest -q          # 208 tests, fully mocked (no API key needed)
 uv run mypy src/research_router
 ```
+
+To inspect the MCP boundary locally on Windows:
+
+```powershell
+npx --yes @modelcontextprotocol/inspector --cli `
+  --cwd E:\SerpAPI\ResearchRouter- `
+  --method tools/list --format json `
+  E:\SerpAPI\ResearchRouter-\.venv\Scripts\python.exe -m research_router
+```
+
+The Inspector CLI can also invoke `research` with `--method tools/call`,
+`--tool-name research`, and `--tool-arg key=value` arguments.
 
 The tests cover reference resolution, task decomposition, parallel execution timing, tool failure and timeout handling, cache hits, budget enforcement, deduplication, the Obsidian round-trip and failure modes, and compatibility with the original response format.
 
