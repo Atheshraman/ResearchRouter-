@@ -282,7 +282,7 @@ class ResearchAgent:
                         task_id=o.task.id,
                         domain=o.task.plan.domain.value,
                         engine=o.task.engine,
-                        metadata={"rank": rank, "task_query": o.task.query},
+                        metadata={**r.metadata, "rank": rank, "task_query": o.task.query},
                     )
                 )
         return candidates, raw_tokens
@@ -566,16 +566,36 @@ def _clean_claim(snippet: str | None, title: str | None, query: str) -> str | No
 
 
 def _why_relevant(result: ResearchResult, query: str, domain: str) -> str:
+    result_text = f"{result.title or ''} {result.snippet or ''}".lower()
+    query_terms = set(salient_terms(query, drop_generic=True))
+    matched = [term for term in query_terms if term in result_text]
     subject = clean_text(result.title) or clean_text(result.snippet)
     if subject:
         subject = truncate_words(subject, 18)
         if domain == "academic":
+            topics: list[str] = []
+            if "hallucination" in matched:
+                topics.append("hallucination")
+            if "factuality" in matched or "evaluation" in matched:
+                topics.append("factuality evaluation")
+            if "rag" in matched or "retrieval" in matched:
+                topics.append("retrieval-augmented generation")
+            if topics:
+                return f"Relevant because it studies {' and '.join(topics)} in language-model systems."
             return f"The paper is relevant because the result focuses on: {subject}."
         if domain == "jobs":
             location = result.metadata.get("location")
             suffix = f" in {location}" if location else ""
             return f"The listing is relevant because it is {subject}{suffix}."
         if domain == "news":
+            date = (
+                result.published_at.date().isoformat()
+                if result.published_at
+                else result.metadata.get("date")
+            )
+            recency_words = {"latest", "recent", "today", "current", "newest", "breaking", "week", "month"}
+            if date and recency_words & set(tokenize(query)):
+                return f"Relevant because it covers {subject} and was published {date}."
             return f"The article is relevant because it covers: {subject}."
         return f"The result is relevant because it covers: {subject}."
     return f"Returned by the {domain} search for this query."

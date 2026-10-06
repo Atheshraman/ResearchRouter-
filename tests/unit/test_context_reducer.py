@@ -52,6 +52,30 @@ class TestText:
 
 
 class TestReducer:
+    def test_recency_intent_changes_news_order_without_overwriting_relevance(self) -> None:
+        recent = _ev(
+            "MCP server update for developers", "https://recent.example", "MCP update",
+            date="2026-09-16T07:00:00+00:00",
+        ).model_copy(update={
+            "domain": "news",
+            "engine": "google_news",
+                "metadata": {"rank": 0, "task_query": "latest MCP news"},
+        })
+        older = _ev(
+            "MCP protocol specification news", "https://older.example", "MCP specification",
+            date="2026-07-28T07:00:00+00:00",
+        ).model_copy(update={
+            "domain": "news",
+            "engine": "google_news",
+                "metadata": {"rank": 5, "task_query": "latest MCP news"},
+        })
+        out = ContextReducer(min_relevance=0.0).reduce(
+            [older, recent], "latest MCP news", 5000
+        )
+        assert out.evidence[0].source.url == "https://recent.example"
+        assert out.evidence[0].relevance_score != out.evidence[0].metadata["final_score"]
+        assert out.context[0]["freshness_score"] > out.context[1]["freshness_score"]
+
     def test_dedups_urls_and_near_duplicate_text(self) -> None:
         dup = "RAG reduces hallucination in LLMs by grounding answers"
         items = [

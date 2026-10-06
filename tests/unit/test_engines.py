@@ -72,6 +72,8 @@ class TestScholarEngine:
         assert len(results) == 2
         assert "Retrieval-Augmented Generation" in results[0].title  # type: ignore[operator]
         assert results[0].metadata["cited_by"] == 3500
+        assert results[0].metadata["snippet"]
+        assert results[0].metadata["publication_info"] == "P Lewis, E Perez - NeurIPS, 2020"
 
 
 class TestJobsEngine:

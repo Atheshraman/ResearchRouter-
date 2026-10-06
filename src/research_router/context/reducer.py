@@ -433,14 +433,4 @@ def _recency_score(date_str: str | None) -> float:
     if published.tzinfo is None:
         published = published.replace(tzinfo=UTC)
     age_days = max(0.0, (datetime.now(UTC) - published.astimezone(UTC)).total_seconds() / 86400)
-    if age_days <= 1:
-        return 1.0
-    if age_days <= 7:
-        return 0.9
-    if age_days <= 30:
-        return 0.5
-    if age_days <= 90:
-        return 0.3
-    if age_days <= 180:
-        return 0.15
-    return 0.05
+    return max(0.0, min(1.0, math.exp(-age_days / 60.0)))

@@ -61,6 +61,13 @@ class Evidence(BaseModel):
             out["domain"] = self.domain
         if self.engine:
             out["engine"] = self.engine
+        for field in ("snippet", "authors", "publication_info", "year"):
+            value = self.metadata.get(field)
+            if value not in (None, "", [], {}):
+                out[field] = value
+        if self.domain == "news" and "recency_score" in self.metadata:
+            out["freshness_score"] = self.metadata["recency_score"]
+            out["ranking_score"] = self.metadata.get("final_score", self.relevance_score)
         if self.why_relevant:
             out["why_relevant"] = self.why_relevant
         return out

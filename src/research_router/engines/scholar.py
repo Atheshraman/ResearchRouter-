@@ -47,6 +47,9 @@ class ScholarEngine(SearchEngine):
                     snippet=item.get("snippet"),
                     source=pub_info.get("summary") if isinstance(pub_info, dict) else None,
                     metadata={
+                        "snippet": item.get("snippet"),
+                        "authors": pub_info.get("authors", []) if isinstance(pub_info, dict) else [],
+                        "publication_info": pub_info.get("summary") if isinstance(pub_info, dict) else None,
                         "cited_by": item.get("inline_links", {}).get("cited_by", {}).get("total"),
                         "year": pub_info.get("summary", "").split(",")[-1].strip()
                         if isinstance(pub_info, dict)
