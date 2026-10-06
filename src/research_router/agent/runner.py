@@ -36,12 +36,13 @@ class TaskOutcome:
     results: list[ResearchResult] = field(default_factory=list)
     errors: list[SearchError] = field(default_factory=list)
     execution_time_ms: int = 0
+    diagnostics: dict[str, object] = field(default_factory=dict)
 
     @property
     def status(self) -> str:
         if self.results:
             return "completed" if not self.errors else "completed_with_errors"
-        return "failed"
+        return "failed" if self.errors else "empty"
 
 
 class TaskRunner:
@@ -81,7 +82,13 @@ class TaskRunner:
     ) -> list[TaskOutcome]:
         primaries = await self._call_many([t.plan for t in tasks], metrics)
         outcomes = [
-            TaskOutcome(task=t, results=res, errors=err, execution_time_ms=elapsed)
+            TaskOutcome(
+                task=t,
+                results=res,
+                errors=err,
+                execution_time_ms=elapsed,
+                diagnostics=self._executor.diagnostics(t.engine),
+            )
             for t, (res, err, elapsed) in zip(tasks, primaries, strict=True)
         ]
 

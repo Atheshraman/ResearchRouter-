@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import re
+from datetime import UTC, timedelta
 from typing import Any
 
 from research_router.engines.base import SearchEngine
 from research_router.models.plan import SearchPlan
 from research_router.models.result import ResearchResult
 from research_router.serpapi.client import SerpApiClient
+from research_router.utils.dates import now
 
 
 class NewsEngine(SearchEngine):
@@ -50,6 +53,28 @@ class NewsEngine(SearchEngine):
                         "date": item.get("date"),
                         "thumbnail": item.get("thumbnail"),
                     },
+                    published_at=_parse_news_date(item.get("date")),
                 )
             )
         return results
+
+
+def _parse_news_date(value: object) -> Any:
+    """Convert common Google News relative dates to timezone-aware datetimes."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip().lower()
+    if text in {"just now", "now"}:
+        return now()
+    match = re.fullmatch(r"(\d+)\s+(minute|hour|day|week)s?\s+ago", text)
+    if not match:
+        return None
+    amount = int(match.group(1))
+    unit = match.group(2)
+    delta = {
+        "minute": timedelta(minutes=amount),
+        "hour": timedelta(hours=amount),
+        "day": timedelta(days=amount),
+        "week": timedelta(weeks=amount),
+    }[unit]
+    return now().astimezone(UTC) - delta

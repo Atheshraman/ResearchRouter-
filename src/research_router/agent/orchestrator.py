@@ -27,7 +27,7 @@ from research_router.agent.task_planner import ExecutionPlan, TaskPlanner
 from research_router.context.evidence import Evidence, EvidenceSource, SourceType
 from research_router.context.manager import ContextManager, ResolvedContext
 from research_router.context.reducer import ContextReducer, ReductionResult
-from research_router.context.text import salient_terms
+from research_router.context.text import clean_text, salient_terms, split_sentences, tokenize
 from research_router.context.tokens import estimate_tokens
 from research_router.memory.base import MemoryHit, MemoryStore, ResearchRecord
 from research_router.memory.obsidian import hits_to_evidence
@@ -251,7 +251,8 @@ class ResearchAgent:
                     continue  # already shown earlier in this session
                 candidates.append(
                     Evidence(
-                        claim=r.snippet or r.title or "",
+                        claim=_clean_claim(r.snippet, r.title, o.task.query),
+                        why_relevant=_why_relevant(r, o.task.query, o.task.plan.domain.value),
                         source=EvidenceSource(
                             title=r.title,
                             url=r.url,
@@ -261,7 +262,7 @@ class ResearchAgent:
                         task_id=o.task.id,
                         domain=o.task.plan.domain.value,
                         engine=o.task.engine,
-                        metadata={"rank": rank},
+                        metadata={"rank": rank, "task_query": o.task.query},
                     )
                 )
         return candidates, raw_tokens
@@ -379,13 +380,14 @@ class ResearchAgent:
             *task_sections,
         ]
         task_section_ids = {id(section) for section in task_sections}
+        has_tasks = bool(response.get("tasks"))
         while estimate_tokens(response) > budget:
             target = next(
                 (
                     s
                     for s in sections
                     if len(s) > 1 or (not task_section_ids and s)
-                    or (id(s) not in task_section_ids and s is response["results"] and s)
+                    or (not has_tasks and s is response["results"] and s)
                 ),
                 None,
             )
@@ -487,11 +489,36 @@ def _task_summaries(
             "results": selected,
             "selected_results": len(selected),
         }
+        if outcome and outcome.diagnostics:
+            entry["diagnostics"] = outcome.diagnostics
         if task_errors:
             entry["status"] = "failed" if not selected else "completed_with_errors"
             entry["errors"] = task_errors
             entry["error"] = task_errors[0]["message"]
-        elif not selected:
+        elif not selected and entry["status"] == "failed":
             entry["error"] = f"No {task.plan.domain.value} results returned"
         summaries.append(entry)
     return summaries
+
+
+def _clean_claim(snippet: str | None, title: str | None, query: str) -> str:
+    """Keep complete, on-topic sentences; fall back to a clean title."""
+    text = clean_text(snippet)
+    terms = set(salient_terms(query, drop_generic=True))
+    sentences = split_sentences(text)
+    candidates = [
+        sentence
+        for sentence in sentences
+        if sentence and sentence[0].isalnum() and (not terms or terms & set(tokenize(sentence)))
+    ]
+    if candidates:
+        return candidates[0]
+    return clean_text(title)
+
+
+def _why_relevant(result: ResearchResult, query: str, domain: str) -> str:
+    result_terms = set(tokenize(f"{result.title or ''} {result.snippet or ''}"))
+    terms = [term for term in salient_terms(query, drop_generic=True) if term in result_terms][:4]
+    if terms:
+        return f"Matches the {domain} request through: {', '.join(terms)}."
+    return f"Returned by the {domain} search for this query."

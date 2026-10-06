@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from research_router.engines.base import SearchEngine
@@ -15,18 +16,28 @@ class JobsEngine(SearchEngine):
 
     def __init__(self, client: SerpApiClient) -> None:
         self._client = client
+        self.last_diagnostics: dict[str, Any] = {}
 
     @property
     def engine_name(self) -> str:
         return "google_jobs"
 
     def build_params(self, plan: SearchPlan) -> dict[str, Any]:
+        location = plan.parameters.get("location")
+        query = plan.query
+        if isinstance(location, str) and location:
+            query = re.sub(
+                rf"\s+(?:in|at|near|around)\s+{re.escape(location)}\b",
+                "",
+                query,
+                flags=re.IGNORECASE,
+            ).strip()
         params: dict[str, Any] = {
             "engine": self.engine_name,
-            "q": plan.query,
+            "q": query or plan.query,
         }
-        if plan.parameters.get("location"):
-            params["location"] = plan.parameters["location"]
+        if location:
+            params["location"] = location
         # Date posted filter
         date_range = plan.parameters.get("date_range")
         chip_map = {
@@ -42,6 +53,14 @@ class JobsEngine(SearchEngine):
     async def search(self, plan: SearchPlan) -> list[ResearchResult]:
         params = self.build_params(plan)
         raw = await self._client.search(params)
+        self.last_diagnostics = {
+            "engine": self.engine_name,
+            "query": plan.query,
+            "request": {k: v for k, v in params.items() if k != "api_key"},
+            "serpapi_status": raw.get("search_metadata", {}).get("status"),
+            "response_keys": sorted(raw.keys()),
+            "jobs_results_count": len(raw.get("jobs_results", [])),
+        }
         return self._normalise(raw)
 
     @staticmethod

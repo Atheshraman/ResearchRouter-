@@ -74,6 +74,12 @@ class TestScholarEngine:
 
 
 class TestJobsEngine:
+    def test_removes_duplicate_location_from_query(self) -> None:
+        engine = JobsEngine(_mock_client("jobs.json"))
+        params = engine.build_params(_plan("google_jobs", "AI internships in Chennai", location="Chennai"))
+        assert params["q"] == "AI internships"
+        assert params["location"] == "Chennai"
+
     async def test_normalises_jobs_results(self) -> None:
         engine = JobsEngine(_mock_client("jobs.json"))
         results = await engine.search(_plan("google_jobs"))

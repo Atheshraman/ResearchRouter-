@@ -39,6 +39,15 @@ class ResearchExecutor:
         self._registry = registry
         self._semaphore = asyncio.Semaphore(max_concurrent)
 
+    def diagnostics(self, engine_name: str) -> dict[str, object]:
+        """Return safe diagnostics captured by an engine adapter."""
+        try:
+            engine = self._registry.get(engine_name)
+        except KeyError:
+            return {}
+        diagnostics = getattr(engine, "last_diagnostics", {})
+        return dict(diagnostics) if isinstance(diagnostics, dict) else {}
+
     async def execute(self, plan: SearchPlan, original_query: str) -> ResearchResponse:
         """Run *plan* and return a normalised, deduplicated, ranked response."""
         request_id = generate_request_id()

@@ -29,6 +29,7 @@ class Evidence(BaseModel):
     """A single claim plus the provenance needed to cite it."""
 
     claim: str
+    why_relevant: str | None = None
     source: EvidenceSource = Field(default_factory=EvidenceSource)
     relevance_score: float = Field(default=0.0, ge=0.0, le=1.0)
     source_type: SourceType = SourceType.WEB
@@ -60,6 +61,6 @@ class Evidence(BaseModel):
             out["domain"] = self.domain
         if self.engine:
             out["engine"] = self.engine
-        if self.claim:
-            out["why_relevant"] = self.claim
+        if self.why_relevant:
+            out["why_relevant"] = self.why_relevant
         return out

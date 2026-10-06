@@ -291,15 +291,23 @@ class ContextReducer:
         cutoff = datetime.now(UTC) - timedelta(days=365)
 
         for e, doc, title in zip(items, docs, titles, strict=True):
-            coverage = sum(w for t, w in plain.items() if t in doc) / plain_total
-            distinct = sum(w for t, w in rare.items() if t in doc) / rare_total
-            title_hit = sum(w for t, w in plain.items() if t in title) / plain_total
+            local_terms = salient_terms(str(e.metadata.get("task_query", query))) or terms
+            local_plain = {t: plain.get(t, 1.0) for t in local_terms}
+            local_total = sum(local_plain.values()) or 1.0
+            coverage = sum(w for t, w in local_plain.items() if t in doc) / local_total
+            distinct = sum(rare.get(t, 1.0) for t in local_terms if t in doc) / rare_total
+            title_hit = sum(w for t, w in local_plain.items() if t in title) / local_total
             score = 0.55 * coverage + 0.15 * distinct + 0.2 * title_hit
             rank = e.metadata.get("rank")
             if isinstance(rank, int) and rank >= 0:
                 score += 0.1 / (1 + rank)  # engine's own ordering as a weak prior
             if freshness_required and _is_recent(e.source.date, cutoff):
                 score += 0.1
+            if e.domain == "news" and e.source.date:
+                if _is_recent(e.source.date, cutoff):
+                    score += 0.1
+                if e.source.publisher:
+                    score += 0.03
             if not terms:
                 score = max(score, 0.5)
             e.relevance_score = max(0.0, min(1.0, score))
