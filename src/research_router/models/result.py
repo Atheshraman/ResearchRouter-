@@ -52,7 +52,7 @@ class ResearchResponse(BaseModel):
         default=ResearchDomain.GENERAL,
         description="Detected domain.",
     )
-    engine: str = Field(default="google", description="Primary engine used.")
+    engine: str | None = Field(default="google", description="Primary engine, or null for multi-domain results.")
     results: list[ResearchResult] = Field(
         default_factory=list,
         description="Normalised results.",

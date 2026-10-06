@@ -93,6 +93,16 @@ class TestTaskPlanning:
         plan = await self._plan("latest AI news and the best laptops under ₹90000")
         assert {t.tool for t in plan.tasks} == {"news_search", "shopping_search"}
 
+    async def test_three_domain_query_has_stable_task_ids_and_order(self) -> None:
+        plan = await self._plan(
+            "Find recent papers about RAG hallucination, AI internships in Chennai, and the latest MCP news"
+        )
+        assert [(t.id, t.plan.domain.value, t.engine) for t in plan.tasks] == [
+            ("t1", "academic", "google_scholar"),
+            ("t2", "jobs", "google_jobs"),
+            ("t3", "news", "google_news"),
+        ]
+
     async def test_plan_is_internal_unless_debug(self) -> None:
         router = _router(FakeSerpApi())
         out = await router.research("RAG hallucination papers")
@@ -177,6 +187,22 @@ class TestExecution:
         assert len(fake.calls) == 1
         assert out["metadata"]["metrics"]["tool_calls"] == 0
         assert out["metadata"]["metrics"]["cache_hits"] == 1
+
+    async def test_multi_domain_response_preserves_task_boundaries(self) -> None:
+        fake = FakeSerpApi(delay=0.02)
+        out = await _router(fake).research(
+            "Find today's AI news, Java jobs in Bangalore, and recent papers about LLM agents",
+            debug=True,
+        )
+        assert out["engine"] is None
+        assert out["engines"] == ["google_news", "google_jobs", "google_scholar"]
+        assert [(t["task_id"], t["domain"], t["engine"]) for t in out["tasks"]] == [
+            ("t1", "news", "google_news"),
+            ("t2", "jobs", "google_jobs"),
+            ("t3", "academic", "google_scholar"),
+        ]
+        assert all(t["results"] for t in out["tasks"])
+        assert out["metadata"]["metrics"]["parallel_wall_time_ms"] > 0
 
     async def test_budget_bounds_whole_response(self) -> None:
         router = _router(FakeSerpApi())

@@ -33,6 +33,7 @@ class Evidence(BaseModel):
     relevance_score: float = Field(default=0.0, ge=0.0, le=1.0)
     source_type: SourceType = SourceType.WEB
     task_id: str | None = None
+    domain: str | None = None
     engine: str | None = None
     # When the evidence was recorded (memory) or retrieved (web), ISO-8601.
     recorded_at: str | None = None
@@ -53,6 +54,12 @@ class Evidence(BaseModel):
         out["source_type"] = self.source_type.value
         if self.source_type is not SourceType.WEB and self.recorded_at:
             out["recorded_at"] = self.recorded_at
-        if self.task_id and not compact:
-            out["task"] = self.task_id
+        if self.task_id:
+            out["task_id"] = self.task_id
+        if self.domain:
+            out["domain"] = self.domain
+        if self.engine:
+            out["engine"] = self.engine
+        if self.claim:
+            out["why_relevant"] = self.claim
         return out

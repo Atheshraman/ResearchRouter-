@@ -46,7 +46,7 @@ _TASK_NAMES: dict[ResearchDomain, str] = {
 }
 
 _SPLIT_RE = re.compile(
-    r"\s*(?:;|\s+as well as\s+|\s+along with\s+|\s+plus\s+"
+    r"\s*(?:;|,\s*(?:and\s+)?|\s+as well as\s+|\s+along with\s+|\s+plus\s+"
     r"|\s+and\s+(?:also\s+)?(?=(?:their|its|the|related|corresponding|any|some|recent|latest"
     r"|find|get|show|list|search|look\s+up)\b))\s*",
     re.I,
@@ -74,9 +74,14 @@ class PlannedTask:
     expansions: list[SearchPlan] = field(default_factory=list)
     depends_on: list[str] = field(default_factory=list)
 
+    @property
+    def task_id(self) -> str:
+        return self.id
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
+            "task_id": self.task_id,
             "task": self.name,
             "tool": self.tool,
             "engine": self.engine,
@@ -171,7 +176,11 @@ class TaskPlanner:
 
     def decompose(self, query: str) -> list[str]:
         """Split *query* into independent sub-requests (or return it whole)."""
-        raw_parts = [p.strip(" ,.") for p in _SPLIT_RE.split(query) if p and p.strip(" ,.")]
+        raw_parts = [
+            p.strip(" ,.").removeprefix("and ").strip()
+            for p in _SPLIT_RE.split(query)
+            if p and p.strip(" ,.")
+        ]
         if len(raw_parts) < 2:
             return [query]
 

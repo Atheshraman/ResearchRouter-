@@ -56,6 +56,13 @@ _COMPACT_METRIC_KEYS = (
     "output_context_tokens",
     "response_tokens",
     "compression_ratio",
+    "reduction_ratio",
+    "remaining_ratio",
+    "reduction_percent",
+    "remaining_percent",
+    "sum_task_time_ms",
+    "parallel_wall_time_ms",
+    "parallelism_gain",
     "memory_hits",
     "execution_time_ms",
 )
@@ -65,6 +72,7 @@ def _evidence_sections(response: dict[str, Any]) -> list[Any]:
     """The research context proper: fresh, earlier-session and memory evidence."""
     return [
         response.get("results", []),
+        *[task.get("results", []) for task in response.get("tasks", [])],
         response.get("previous_context", {}).get("evidence", []),
         response.get("memory", {}).get("evidence", []),
     ]
@@ -145,7 +153,9 @@ class ResearchAgent:
 
         errors = [e for o in outcomes for e in o.errors]
         m.errors = len(errors)
-        response = self._assemble(query, resolved, plan, web, memory_red, context_red, errors)
+        response = self._assemble(
+            query, resolved, plan, web, memory_red, context_red, errors, outcomes
+        )
         if warnings:
             response["warnings"] = warnings
 
@@ -161,7 +171,9 @@ class ResearchAgent:
         response["metadata"]["execution_time_ms"] = m.execution_time_ms
         self._set_compact_metrics(response, m)
         self._enforce_budget(response, budget)
-        m.final_evidence = len(response["results"])
+        m.final_evidence = sum(
+            len(task.get("results", [])) for task in response.get("tasks", [])
+        ) or len(response["results"])
         m.output_context_tokens = estimate_tokens(_evidence_sections(response))
         m.response_tokens = estimate_tokens(response)
         self._set_compact_metrics(response, m)
@@ -247,6 +259,7 @@ class ResearchAgent:
                             publisher=r.source,
                         ),
                         task_id=o.task.id,
+                        domain=o.task.plan.domain.value,
                         engine=o.task.engine,
                         metadata={"rank": rank},
                     )
@@ -310,12 +323,14 @@ class ResearchAgent:
         memory: ReductionResult,
         context: ReductionResult,
         errors: list[SearchError],
+        outcomes: list[TaskOutcome],
     ) -> dict[str, Any]:
         primary = plan.primary
+        engines = [t.engine for t in plan.tasks]
         response: dict[str, Any] = {
             "query": query,
             "domain": plan.intent,
-            "engine": primary.engine if primary else "none",
+            "engine": primary.engine if len(engines) == 1 and primary else (None if engines else "none"),
             "results": web.context,
             "total_results": len(web.context),
             "sources": sorted({e.source.publisher for e in web.evidence if e.source.publisher}),
@@ -327,6 +342,9 @@ class ResearchAgent:
                 "after_dedup": web.stats.deduplicated,
             },
         }
+        if len(engines) > 1:
+            response["engines"] = engines
+            response["tasks"] = _task_summaries(plan, web, errors, outcomes)
         if resolved.resolved_query != query:
             response["resolved_query"] = resolved.resolved_query
         if plan.context_only:
@@ -342,6 +360,7 @@ class ResearchAgent:
             response["memory"] = {"label": MEMORY_LABEL, "notes": notes, "evidence": memory.context}
         return response
 
+
     @staticmethod
     def _set_compact_metrics(response: dict[str, Any], m: RequestMetrics) -> None:
         full = m.as_dict()
@@ -350,21 +369,49 @@ class ResearchAgent:
     @staticmethod
     def _enforce_budget(response: dict[str, Any], budget: int) -> None:
         """Final guard: trim lowest-ranked evidence if the whole envelope overshoots."""
+        task_sections = [
+            task["results"] for task in response.get("tasks", []) if task.get("results")
+        ]
         sections = [
             response["results"],
             response.get("previous_context", {}).get("evidence", []),
             response.get("memory", {}).get("evidence", []),
+            *task_sections,
         ]
-        preserve_minimum = budget <= _ENVELOPE_RESERVE * 2
+        task_section_ids = {id(section) for section in task_sections}
         while estimate_tokens(response) > budget:
             target = next(
-                (s for s in sections if len(s) > 1 or (s and not preserve_minimum)),
+                (
+                    s
+                    for s in sections
+                    if len(s) > 1 or (not task_section_ids and s)
+                    or (id(s) not in task_section_ids and s is response["results"] and s)
+                ),
                 None,
             )
             if target is None:
-                break  # preserve one item per section when the envelope cannot fit
+                # At very small budgets there may be no evidence left to trim;
+                # remove optional envelope detail before violating the contract.
+                response.pop("sources", None)
+                response.pop("errors", None)
+                response.get("metadata", {}).pop("metrics", None)
+                if estimate_tokens(response) <= budget:
+                    break
+                response.get("metadata", {}).pop("after_dedup", None)
+                response.get("metadata", {}).pop("total_raw_results", None)
+                if estimate_tokens(response) <= budget:
+                    break
+                break
             target.pop()
-        response["total_results"] = len(response["results"])
+        response["total_results"] = sum(
+            len(task.get("results", [])) for task in response.get("tasks", [])
+        ) or len(response["results"])
+        for task in response.get("tasks", []):
+            task_results = task.get("results", [])
+            task["selected_results"] = len(task_results)
+            if not task_results and task.get("raw_results", 0):
+                task["status"] = "budget_limited"
+                task["error"] = "Context budget removed all selected evidence for this task"
 
     async def _save(
         self,
@@ -402,3 +449,49 @@ class ResearchAgent:
             response.setdefault("warnings", []).append(
                 f"Could not save research note ({type(exc).__name__})."
             )
+
+
+def _task_summaries(
+    plan: ExecutionPlan,
+    web: ReductionResult,
+    errors: list[SearchError],
+    outcomes: list[TaskOutcome],
+) -> list[dict[str, Any]]:
+    """Build task sections from task IDs, never from completion order."""
+    by_task: dict[str, list[dict[str, Any]]] = {}
+    for item in web.context:
+        task_id = str(item.get("task_id", ""))
+        if task_id:
+            by_task.setdefault(task_id, []).append(item)
+
+    error_by_task: dict[str, list[dict[str, Any]]] = {}
+    for error in errors:
+        for task in plan.tasks:
+            if task.query == error.query and task.engine == error.engine:
+                error_by_task.setdefault(task.id, []).append(error.model_dump())
+
+    summaries: list[dict[str, Any]] = []
+    outcome_by_task = {outcome.task.id: outcome for outcome in outcomes}
+    for task in plan.tasks:
+        task_errors = error_by_task.get(task.id, [])
+        selected = by_task.get(task.id, [])
+        outcome = outcome_by_task.get(task.id)
+        entry: dict[str, Any] = {
+            "task_id": task.id,
+            "domain": task.plan.domain.value,
+            "engine": task.engine,
+            "query": task.query,
+            "status": outcome.status if outcome else ("completed" if selected else "failed"),
+            "execution_time_ms": outcome.execution_time_ms if outcome else 0,
+            "raw_results": len(outcome.results) if outcome else 0,
+            "results": selected,
+            "selected_results": len(selected),
+        }
+        if task_errors:
+            entry["status"] = "failed" if not selected else "completed_with_errors"
+            entry["errors"] = task_errors
+            entry["error"] = task_errors[0]["message"]
+        elif not selected:
+            entry["error"] = f"No {task.plan.domain.value} results returned"
+        summaries.append(entry)
+    return summaries

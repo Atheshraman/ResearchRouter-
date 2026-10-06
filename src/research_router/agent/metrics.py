@@ -38,6 +38,8 @@ class RequestMetrics:
     memory_saved: str | None = None
     errors: int = 0
     execution_time_ms: int = 0
+    sum_task_time_ms: int = 0
+    parallel_wall_time_ms: int = 0
     stage_ms: dict[str, int] = field(default_factory=dict)
     _t0: float = field(default_factory=time.perf_counter, repr=False)
 
@@ -46,6 +48,18 @@ class RequestMetrics:
         if self.input_tokens_estimated <= 0:
             return 0.0
         return round(1 - self.output_context_tokens / self.input_tokens_estimated, 4)
+
+    @property
+    def remaining_ratio(self) -> float:
+        if self.input_tokens_estimated <= 0:
+            return 0.0
+        return round(self.output_context_tokens / self.input_tokens_estimated, 4)
+
+    @property
+    def parallelism_gain(self) -> float:
+        if self.parallel_wall_time_ms <= 0:
+            return 0.0
+        return round(self.sum_task_time_ms / self.parallel_wall_time_ms, 2)
 
     @contextmanager
     def stage(self, name: str) -> Iterator[None]:
@@ -62,6 +76,11 @@ class RequestMetrics:
         data = asdict(self)
         data.pop("_t0", None)
         data["compression_ratio"] = self.compression_ratio
+        data["reduction_ratio"] = self.compression_ratio
+        data["remaining_ratio"] = self.remaining_ratio
+        data["reduction_percent"] = round(self.compression_ratio * 100, 2)
+        data["remaining_percent"] = round(self.remaining_ratio * 100, 2)
+        data["parallelism_gain"] = self.parallelism_gain
         return data
 
 

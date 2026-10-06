@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass, field
 
 from research_router.agent.metrics import RequestMetrics
@@ -34,6 +35,13 @@ class TaskOutcome:
     task: PlannedTask
     results: list[ResearchResult] = field(default_factory=list)
     errors: list[SearchError] = field(default_factory=list)
+    execution_time_ms: int = 0
+
+    @property
+    def status(self) -> str:
+        if self.results:
+            return "completed" if not self.errors else "completed_with_errors"
+        return "failed"
 
 
 class TaskRunner:
@@ -51,6 +59,7 @@ class TaskRunner:
         self._adaptive = adaptive_expansion
 
     async def run(self, tasks: list[PlannedTask], metrics: RequestMetrics) -> list[TaskOutcome]:
+        started = time.perf_counter()
         outcomes: dict[str, TaskOutcome] = {}
         pending = list(tasks)
         while pending:
@@ -60,7 +69,10 @@ class TaskRunner:
             pending = [t for t in pending if t not in ready]
             wave = await self._run_wave(ready, metrics)
             outcomes.update({o.task.id: o for o in wave})
-        return [outcomes[t.id] for t in tasks]
+        ordered = [outcomes[t.id] for t in tasks]
+        metrics.parallel_wall_time_ms += int((time.perf_counter() - started) * 1000)
+        metrics.sum_task_time_ms += sum(o.execution_time_ms for o in ordered)
+        return ordered
 
     # ── waves ─────────────────────────────────────────────────────
 
@@ -69,8 +81,8 @@ class TaskRunner:
     ) -> list[TaskOutcome]:
         primaries = await self._call_many([t.plan for t in tasks], metrics)
         outcomes = [
-            TaskOutcome(task=t, results=res, errors=err)
-            for t, (res, err) in zip(tasks, primaries, strict=True)
+            TaskOutcome(task=t, results=res, errors=err, execution_time_ms=elapsed)
+            for t, (res, err, elapsed) in zip(tasks, primaries, strict=True)
         ]
 
         # Expansions/fallbacks depend on the primary results, so they run after.
@@ -85,7 +97,7 @@ class TaskRunner:
                 follow_ups.append((o, fb, "fallback"))
         if follow_ups:
             extra = await self._call_many([p for _, p, _ in follow_ups], metrics)
-            for (o, _, kind), (res, err) in zip(follow_ups, extra, strict=True):
+            for (o, _, kind), (res, err, _) in zip(follow_ups, extra, strict=True):
                 o.results.extend(res)
                 o.errors.extend(err)
                 if kind == "expansion":
@@ -105,7 +117,7 @@ class TaskRunner:
 
     @staticmethod
     def _needs_fallback(o: TaskOutcome) -> bool:
-        if o.task.engine == "google" or o.results:
+        if o.task.engine == "google" or o.task.plan.domain.value == "jobs" or o.results:
             return False
         return not any(e.error_type in _NO_FALLBACK_ERRORS for e in o.errors)
 
@@ -113,18 +125,23 @@ class TaskRunner:
 
     async def _call_many(
         self, plans: list[SearchPlan], metrics: RequestMetrics
-    ) -> list[tuple[list[ResearchResult], list[SearchError]]]:
+    ) -> list[tuple[list[ResearchResult], list[SearchError], int]]:
         uncached = sum(1 for p in plans if self._cache_get(p) is None)
         metrics.parallel_tool_calls = max(metrics.parallel_tool_calls, uncached)
         return list(await asyncio.gather(*(self._call(p, metrics) for p in plans)))
 
     async def _call(
         self, plan: SearchPlan, metrics: RequestMetrics
-    ) -> tuple[list[ResearchResult], list[SearchError]]:
+    ) -> tuple[list[ResearchResult], list[SearchError], int]:
+        started = time.perf_counter()
+
+        def elapsed() -> int:
+            return int((time.perf_counter() - started) * 1000)
+
         cached = self._cache_get(plan)
         if cached is not None:
             metrics.cache_hits += 1
-            return [ResearchResult.model_validate(r) for r in cached], []
+            return [ResearchResult.model_validate(r) for r in cached], [], elapsed()
 
         metrics.tool_calls += 1
         try:
@@ -140,7 +157,7 @@ class TaskRunner:
                     error_type="Timeout",
                     message=f"No response within {self._timeout:.0f}s",
                 )
-            ]
+            ], elapsed()
         except Exception as exc:  # defensive: run_plan already converts errors
             return [], [
                 SearchError(
@@ -149,12 +166,12 @@ class TaskRunner:
                     error_type=type(exc).__name__,
                     message=str(exc),
                 )
-            ]
+            ], elapsed()
         if not errors:
             self._cache.set(
                 plan.engine, plan.query, _cache_params(plan), [r.model_dump() for r in results]
             )
-        return results, errors
+        return results, errors, elapsed()
 
     def _cache_get(self, plan: SearchPlan) -> list[dict[str, object]] | None:
         value = self._cache.get(plan.engine, plan.query, _cache_params(plan))

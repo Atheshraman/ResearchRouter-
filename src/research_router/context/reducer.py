@@ -64,6 +64,12 @@ class ReductionStats:
             return 0.0
         return round(1 - self.output_tokens / self.input_tokens, 4)
 
+    @property
+    def remaining_ratio(self) -> float:
+        if self.input_tokens <= 0:
+            return 0.0
+        return round(self.output_tokens / self.input_tokens, 4)
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "raw_results": self.raw,
@@ -74,6 +80,10 @@ class ReductionStats:
             "input_tokens_estimated": self.input_tokens,
             "output_context_tokens": self.output_tokens,
             "compression_ratio": self.compression_ratio,
+            "reduction_ratio": self.compression_ratio,
+            "remaining_ratio": self.remaining_ratio,
+            "reduction_percent": round(self.compression_ratio * 100, 2),
+            "remaining_percent": round(self.remaining_ratio * 100, 2),
             "compression_level": self.compression_level,
             "dropped_for_budget": self.dropped_for_budget,
             "steps": self.steps,
@@ -248,15 +258,15 @@ class ContextReducer:
             norm = _normalise_url(e.source.url) if e.source.url else None
             if norm and norm in seen_urls:
                 continue
-            title_key = " ".join(tokenize(e.source.title or ""))
-            if len(title_key) > 20 and title_key in seen_titles:
+            title_key = (e.task_id, e.domain, e.engine, " ".join(tokenize(e.source.title or "")))
+            if len(title_key[3]) > 20 and title_key in seen_titles:
                 continue
             sh = shingles(e.claim)
             if any(jaccard(sh, other) >= _NEAR_DUP_THRESHOLD for other in kept_shingles):
                 continue
             if norm:
                 seen_urls.add(norm)
-            if title_key:
+            if title_key[3]:
                 seen_titles.add(title_key)
             kept_shingles.append(sh)
             kept.append(e)
@@ -308,7 +318,7 @@ class ContextReducer:
         sentences = split_sentences(claim)
         if len(sentences) <= 1:
             return claim
-        useful = [s for s in sentences if terms & set(tokenize(s)) or any(ch.isdigit() for ch in s)]
+        useful = [s for s in sentences if terms & set(tokenize(s))]
         chosen = useful or sentences[:1]
         return " ".join(chosen[: self._max_sentences])
 
