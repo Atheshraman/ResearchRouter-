@@ -28,7 +28,7 @@ class EvidenceSource(BaseModel):
 class Evidence(BaseModel):
     """A single claim plus the provenance needed to cite it."""
 
-    claim: str
+    claim: str | None = None
     why_relevant: str | None = None
     source: EvidenceSource = Field(default_factory=EvidenceSource)
     relevance_score: float = Field(default=0.0, ge=0.0, le=1.0)

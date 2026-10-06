@@ -70,9 +70,13 @@ _COMPACT_METRIC_KEYS = (
 
 def _evidence_sections(response: dict[str, Any]) -> list[Any]:
     """The research context proper: fresh, earlier-session and memory evidence."""
+    fresh = (
+        [item for task in response.get("tasks", []) for item in task.get("results", [])]
+        if response.get("tasks")
+        else response.get("results", [])
+    )
     return [
-        response.get("results", []),
-        *[task.get("results", []) for task in response.get("tasks", [])],
+        fresh,
         response.get("previous_context", {}).get("evidence", []),
         response.get("memory", {}).get("evidence", []),
     ]
@@ -177,6 +181,12 @@ class ResearchAgent:
         m.output_context_tokens = estimate_tokens(_evidence_sections(response))
         m.response_tokens = estimate_tokens(response)
         self._set_compact_metrics(response, m)
+        self._enforce_budget(response, budget)
+        m.final_evidence = len(response["results"])
+        m.output_context_tokens = estimate_tokens(_evidence_sections(response))
+        m.response_tokens = estimate_tokens(response)
+        self._set_compact_metrics(response, m)
+        self._enforce_budget(response, budget)
         self._aggregator.record(m)
         log_research_summary(query, sorted({t.tool for t in plan.tasks}), m)
 
@@ -256,7 +266,11 @@ class ResearchAgent:
                         source=EvidenceSource(
                             title=r.title,
                             url=r.url,
-                            date=r.published_at.date().isoformat() if r.published_at else None,
+                            date=(
+                                r.published_at.isoformat()
+                                if r.published_at
+                                else str(r.metadata.get("date")) if r.metadata.get("date") else None
+                            ),
                             publisher=r.source,
                         ),
                         task_id=o.task.id,
@@ -341,6 +355,7 @@ class ResearchAgent:
                 "tools_used": sorted({t.tool for t in plan.tasks}),
                 "total_raw_results": web.stats.raw,
                 "after_dedup": web.stats.deduplicated,
+                "duplicates_removed": max(0, web.stats.raw - web.stats.deduplicated),
             },
         }
         if len(engines) > 1:
@@ -374,13 +389,15 @@ class ResearchAgent:
             task["results"] for task in response.get("tasks", []) if task.get("results")
         ]
         sections = [
-            response["results"],
+            *([] if response.get("tasks") else [response["results"]]),
             response.get("previous_context", {}).get("evidence", []),
             response.get("memory", {}).get("evidence", []),
             *task_sections,
         ]
         task_section_ids = {id(section) for section in task_sections}
         has_tasks = bool(response.get("tasks"))
+        if has_tasks:
+            _sync_flattened_results(response)
         while estimate_tokens(response) > budget:
             target = next(
                 (
@@ -403,11 +420,22 @@ class ResearchAgent:
                 response.get("metadata", {}).pop("total_raw_results", None)
                 if estimate_tokens(response) <= budget:
                     break
+                response.get("metadata", {}).pop("request_id", None)
+                response.get("metadata", {}).pop("tools_used", None)
                 break
             target.pop()
-        response["total_results"] = sum(
-            len(task.get("results", [])) for task in response.get("tasks", [])
-        ) or len(response["results"])
+            if has_tasks:
+                _sync_flattened_results(response)
+        if has_tasks:
+            _sync_flattened_results(response)
+        if (
+            estimate_tokens(response) > budget
+            and not response.get("results")
+            and not response.get("tasks")
+        ):
+            response["metadata"] = {}
+            response.pop("engine", None)
+        response["total_results"] = len(response["results"])
         for task in response.get("tasks", []):
             task_results = task.get("results", [])
             task["selected_results"] = len(task_results)
@@ -451,6 +479,13 @@ class ResearchAgent:
             response.setdefault("warnings", []).append(
                 f"Could not save research note ({type(exc).__name__})."
             )
+
+
+def _sync_flattened_results(response: dict[str, Any]) -> None:
+    flattened = [
+        item for task in response.get("tasks", []) for item in task.get("results", [])
+    ]
+    response.setdefault("results", [])[:] = flattened
 
 
 def _task_summaries(
@@ -501,7 +536,7 @@ def _task_summaries(
     return summaries
 
 
-def _clean_claim(snippet: str | None, title: str | None, query: str) -> str:
+def _clean_claim(snippet: str | None, title: str | None, query: str) -> str | None:
     """Keep complete, on-topic sentences; fall back to a clean title."""
     text = clean_text(snippet)
     terms = set(salient_terms(query, drop_generic=True))
@@ -513,12 +548,19 @@ def _clean_claim(snippet: str | None, title: str | None, query: str) -> str:
     ]
     if candidates:
         return candidates[0]
-    return clean_text(title)
+    return None
 
 
 def _why_relevant(result: ResearchResult, query: str, domain: str) -> str:
     result_terms = set(tokenize(f"{result.title or ''} {result.snippet or ''}"))
     terms = [term for term in salient_terms(query, drop_generic=True) if term in result_terms][:4]
     if terms:
-        return f"Matches the {domain} request through: {', '.join(terms)}."
+        subject = ", ".join(terms)
+        if domain == "academic":
+            return f"The paper is relevant because it addresses {subject}."
+        if domain == "jobs":
+            return f"The listing is relevant because it matches {subject}."
+        if domain == "news":
+            return f"The article is relevant because it reports on {subject}."
+        return f"The result is relevant because it matches {subject}."
     return f"Returned by the {domain} search for this query."

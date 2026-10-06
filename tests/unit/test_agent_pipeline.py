@@ -202,6 +202,17 @@ class TestExecution:
             ("t3", "academic", "google_scholar"),
         ]
         assert all(t["results"] for t in out["tasks"])
+        assert len(out["results"]) == out["total_results"]
+        assert len(out["results"]) == sum(t["selected_results"] for t in out["tasks"])
+        assert all(
+            {"task_id", "domain", "engine"}.issubset(result)
+            for result in out["results"]
+        )
+        assert all(
+            result.get("claim") != result.get("why_relevant")
+            for result in out["results"]
+            if result.get("claim") and result.get("why_relevant")
+        )
         assert out["metadata"]["metrics"]["parallel_wall_time_ms"] > 0
 
     async def test_budget_bounds_whole_response(self) -> None:

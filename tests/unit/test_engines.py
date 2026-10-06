@@ -62,6 +62,7 @@ class TestNewsEngine:
         assert results[0].title == "AI Breakthrough: New Model Surpasses GPT-4"
         assert results[0].source == "Tech News Daily"
         assert results[0].metadata["date"] == "2 hours ago"
+        assert results[0].published_at is not None
 
 
 class TestScholarEngine:

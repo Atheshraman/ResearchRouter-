@@ -166,7 +166,7 @@ class ContextReducer:
         items = self._filter(items)
         stats.relevant = len(items)
         if max_items is not None and len(items) > max_items:
-            items = items[:max_items]
+            items = self._cap_with_task_minimum(items, max_items)
             stats.steps.append(f"capped_to_{max_items}_items")
 
         # Information extraction: keep only the sentences that carry the answer.
@@ -185,7 +185,10 @@ class ContextReducer:
             stats.steps.append(f"compress_level_{level}")
 
         while tokens > budget and len(items) > 1:
-            items = self._drop_one(items)
+            reduced = self._drop_one(items)
+            if len(reduced) == len(items):
+                break
+            items = reduced
             stats.dropped_for_budget += 1
             tokens = self._measure(items, level)
         if stats.dropped_for_budget:
@@ -210,7 +213,9 @@ class ContextReducer:
         for c in candidates:
             try:
                 entry = c.to_context(compact=True)
-                entry["claim"] = truncate_words(str(entry.get("claim", "")), 25)
+                claim = entry.get("claim")
+                if claim:
+                    entry["claim"] = truncate_words(str(claim), 25)
             except Exception:
                 continue
             if estimate_tokens([*context, entry]) > budget:
@@ -250,25 +255,32 @@ class ContextReducer:
     def _deduplicate(items: list[Evidence]) -> list[Evidence]:
         # Web evidence wins over memory/context duplicates: it is fresher.
         ordered = sorted(items, key=lambda e: e.source_type is not SourceType.WEB)
-        seen_urls: set[str] = set()
+        seen_urls: set[tuple[str | None, str | None, str | None, str]] = set()
         seen_titles: set[str] = set()
         kept: list[Evidence] = []
-        kept_shingles: list[set[tuple[str, ...]]] = []
+        kept_shingles: list[
+            tuple[tuple[str | None, str | None, str | None], set[tuple[str, ...]]]
+        ] = []
         for e in ordered:
+            scope = (e.task_id, e.domain, e.engine)
             norm = _normalise_url(e.source.url) if e.source.url else None
-            if norm and norm in seen_urls:
+            url_key = (*scope, norm) if norm else None
+            if url_key and url_key in seen_urls:
                 continue
             title_key = (e.task_id, e.domain, e.engine, " ".join(tokenize(e.source.title or "")))
             if len(title_key[3]) > 20 and title_key in seen_titles:
                 continue
             sh = shingles(e.claim)
-            if any(jaccard(sh, other) >= _NEAR_DUP_THRESHOLD for other in kept_shingles):
+            if any(
+                kept_scope == scope and jaccard(sh, other) >= _NEAR_DUP_THRESHOLD
+                for kept_scope, other in kept_shingles
+            ):
                 continue
-            if norm:
-                seen_urls.add(norm)
+            if url_key:
+                seen_urls.add(url_key)
             if title_key[3]:
                 seen_titles.add(title_key)
-            kept_shingles.append(sh)
+            kept_shingles.append((scope, sh))
             kept.append(e)
         return kept
 
@@ -303,11 +315,12 @@ class ContextReducer:
                 score += 0.1 / (1 + rank)  # engine's own ordering as a weak prior
             if freshness_required and _is_recent(e.source.date, cutoff):
                 score += 0.1
-            if e.domain == "news" and e.source.date:
-                if _is_recent(e.source.date, cutoff):
-                    score += 0.1
+            if e.domain == "news" and _has_recency_intent(
+                str(e.metadata.get("task_query", query))
+            ) and e.source.date:
+                score += 0.25 * _recency_score(e.source.date)
                 if e.source.publisher:
-                    score += 0.03
+                    score += 0.05
             if not terms:
                 score = max(score, 0.5)
             e.relevance_score = max(0.0, min(1.0, score))
@@ -321,7 +334,26 @@ class ContextReducer:
                 per_task[e.task_id] += 1
         return kept
 
-    def _extract(self, claim: str, query: str) -> str:
+    def _cap_with_task_minimum(self, items: list[Evidence], maximum: int) -> list[Evidence]:
+        """Keep a minimum slice for each task before filling by relevance."""
+        if maximum <= 0:
+            return []
+        reserved: list[Evidence] = []
+        reserved_ids: set[int] = set()
+        counts: Counter[str | None] = Counter()
+        for item in items:
+            if counts[item.task_id] < self._min_per_task:
+                reserved.append(item)
+                reserved_ids.add(id(item))
+                counts[item.task_id] += 1
+        if len(reserved) >= maximum:
+            return reserved[:maximum]
+        remainder = [item for item in items if id(item) not in reserved_ids]
+        return [*reserved, *remainder[: maximum - len(reserved)]]
+
+    def _extract(self, claim: str | None, query: str) -> str | None:
+        if not claim:
+            return None
         terms = set(salient_terms(query, drop_generic=True)) or set(salient_terms(query))
         sentences = split_sentences(claim)
         if len(sentences) <= 1:
@@ -338,21 +370,25 @@ class ContextReducer:
             return 0
         return estimate_tokens([e.to_context(compact=level >= 2) for e in items])
 
-    @staticmethod
-    def _drop_one(items: list[Evidence]) -> list[Evidence]:
+    def _drop_one(self, items: list[Evidence]) -> list[Evidence]:
         """Drop the lowest-value item from the most-represented task."""
         counts = Counter(e.task_id for e in items)
-        heaviest = max(counts.values())
+        eligible = {task_id for task_id, count in counts.items() if count > self._min_per_task}
+        if not eligible:
+            return items
+        heaviest = max(counts[task_id] for task_id in eligible)
         for idx in range(len(items) - 1, -1, -1):
-            if counts[items[idx].task_id] == heaviest:
+            if items[idx].task_id in eligible and counts[items[idx].task_id] == heaviest:
                 return items[:idx] + items[idx + 1 :]
-        return items[:-1]
+        return items
 
 
 def _at_level(e: Evidence, level: int) -> Evidence:
-    full = str(e.metadata.get(_FULL_CLAIM, e.claim))
+    full = e.metadata.get(_FULL_CLAIM, e.claim)
+    if not full:
+        return e.model_copy(update={"claim": None})
     limit = _LEVEL_WORDS[level]
-    claim = full if limit is None else truncate_words(full, limit)
+    claim = full if limit is None else truncate_words(str(full), limit)
     return e.model_copy(update={"claim": claim})
 
 
@@ -366,3 +402,33 @@ def _is_recent(date_str: str | None, cutoff: datetime) -> bool:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=UTC)
     return dt >= cutoff
+
+
+def _has_recency_intent(query: str) -> bool:
+    return bool(
+        set(tokenize(query))
+        & {"latest", "recent", "new", "newest", "today", "week", "month", "breaking", "current"}
+    )
+
+
+def _recency_score(date_str: str | None) -> float:
+    if not date_str:
+        return 0.0
+    try:
+        published = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+    except ValueError:
+        return 0.0
+    if published.tzinfo is None:
+        published = published.replace(tzinfo=UTC)
+    age_days = max(0.0, (datetime.now(UTC) - published.astimezone(UTC)).total_seconds() / 86400)
+    if age_days <= 1:
+        return 1.0
+    if age_days <= 7:
+        return 0.9
+    if age_days <= 30:
+        return 0.7
+    if age_days <= 90:
+        return 0.5
+    if age_days <= 365:
+        return 0.2
+    return 0.05

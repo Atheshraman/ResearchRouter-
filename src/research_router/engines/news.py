@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from research_router.engines.base import SearchEngine
@@ -67,14 +67,24 @@ def _parse_news_date(value: object) -> Any:
     if text in {"just now", "now"}:
         return now()
     match = re.fullmatch(r"(\d+)\s+(minute|hour|day|week)s?\s+ago", text)
-    if not match:
-        return None
-    amount = int(match.group(1))
-    unit = match.group(2)
-    delta = {
-        "minute": timedelta(minutes=amount),
-        "hour": timedelta(hours=amount),
-        "day": timedelta(days=amount),
-        "week": timedelta(weeks=amount),
-    }[unit]
-    return now().astimezone(UTC) - delta
+    if match:
+        amount = int(match.group(1))
+        unit = match.group(2)
+        delta = {
+            "minute": timedelta(minutes=amount),
+            "hour": timedelta(hours=amount),
+            "day": timedelta(days=amount),
+            "week": timedelta(weeks=amount),
+        }[unit]
+        return now().astimezone(UTC) - delta
+    for pattern in (
+        "%m/%d/%Y, %I:%M %p, %z UTC",
+        "%b %d, %Y",
+        "%B %d, %Y",
+        "%Y-%m-%d",
+    ):
+        try:
+            return datetime.strptime(value.strip(), pattern).replace(tzinfo=UTC)
+        except ValueError:
+            continue
+    return None
