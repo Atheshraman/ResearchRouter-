@@ -27,7 +27,13 @@ from research_router.agent.task_planner import ExecutionPlan, TaskPlanner
 from research_router.context.evidence import Evidence, EvidenceSource, SourceType
 from research_router.context.manager import ContextManager, ResolvedContext
 from research_router.context.reducer import ContextReducer, ReductionResult
-from research_router.context.text import clean_text, salient_terms, split_sentences, tokenize
+from research_router.context.text import (
+    clean_text,
+    salient_terms,
+    split_sentences,
+    tokenize,
+    truncate_words,
+)
 from research_router.context.tokens import estimate_tokens
 from research_router.memory.base import MemoryHit, MemoryStore, ResearchRecord
 from research_router.memory.obsidian import hits_to_evidence
@@ -538,13 +544,21 @@ def _task_summaries(
 
 def _clean_claim(snippet: str | None, title: str | None, query: str) -> str | None:
     """Keep complete, on-topic sentences; fall back to a clean title."""
+    if snippet and ("..." in snippet or "…" in snippet):
+        return None
     text = clean_text(snippet)
     terms = set(salient_terms(query, drop_generic=True))
     sentences = split_sentences(text)
     candidates = [
         sentence
         for sentence in sentences
-        if sentence and sentence[0].isalnum() and (not terms or terms & set(tokenize(sentence)))
+        if (
+            sentence
+            and sentence[0].isalnum()
+            and sentence[-1] in ".?!"
+            and len(tokenize(sentence)) >= 8
+            and (not terms or terms & set(tokenize(sentence)))
+        )
     ]
     if candidates:
         return candidates[0]
@@ -552,15 +566,16 @@ def _clean_claim(snippet: str | None, title: str | None, query: str) -> str | No
 
 
 def _why_relevant(result: ResearchResult, query: str, domain: str) -> str:
-    result_terms = set(tokenize(f"{result.title or ''} {result.snippet or ''}"))
-    terms = [term for term in salient_terms(query, drop_generic=True) if term in result_terms][:4]
-    if terms:
-        subject = ", ".join(terms)
+    subject = clean_text(result.title) or clean_text(result.snippet)
+    if subject:
+        subject = truncate_words(subject, 18)
         if domain == "academic":
-            return f"The paper is relevant because it addresses {subject}."
+            return f"The paper is relevant because the result focuses on: {subject}."
         if domain == "jobs":
-            return f"The listing is relevant because it matches {subject}."
+            location = result.metadata.get("location")
+            suffix = f" in {location}" if location else ""
+            return f"The listing is relevant because it is {subject}{suffix}."
         if domain == "news":
-            return f"The article is relevant because it reports on {subject}."
-        return f"The result is relevant because it matches {subject}."
+            return f"The article is relevant because it covers: {subject}."
+        return f"The result is relevant because it covers: {subject}."
     return f"Returned by the {domain} search for this query."

@@ -129,7 +129,12 @@ class ContextManager:
     ) -> None:
         """Store a compact record of a completed turn."""
         stored = [
-            e.model_copy(update={"claim": truncate_words(e.claim, 40), "metadata": {}})
+            e.model_copy(
+                update={
+                    "claim": truncate_words(e.claim, 40) if e.claim else None,
+                    "metadata": {},
+                }
+            )
             for e in evidence
             if e.source_type is SourceType.WEB
         ][:_MAX_STORED_RESULTS]

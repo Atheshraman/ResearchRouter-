@@ -259,7 +259,7 @@ def _update_frontmatter(existing: str, stamp: str, query: str, tags: list[str]) 
 
 def _render_session(record: ResearchRecord, stamp: str) -> str:
     findings = record.findings
-    summary = " ".join(truncate_words(e.claim, 30) for e in findings[:3])
+    summary = " ".join(truncate_words(_finding_text(e), 30) for e in findings[:3])
     lines = [
         f"## Session {stamp}",
         "",
@@ -278,7 +278,7 @@ def _render_session(record: ResearchRecord, stamp: str) -> str:
         elif e.source.title:
             cite = f" — {_md_escape(e.source.title)}"
         date = f" ({e.source.date[:10]})" if e.source.date else ""
-        lines.append(f"- {_md_escape(truncate_words(e.claim, 60))}{cite}{date}")
+        lines.append(f"- {_md_escape(truncate_words(_finding_text(e), 60))}{cite}{date}")
     if record.entities:
         lines += ["", "### Entities", ", ".join(record.entities[:15])]
     urls = [(e.source.title, e.source.url) for e in findings if e.source.url]
@@ -290,6 +290,10 @@ def _render_session(record: ResearchRecord, stamp: str) -> str:
         lines += [f"- [[{n}]]" for n in record.related_notes]
     lines += ["", " ".join(f"#{t}" for t in _tags(record)), ""]
     return "\n".join(lines) + "\n"
+
+
+def _finding_text(evidence: Evidence) -> str:
+    return evidence.claim or evidence.source.title or "No claim extracted."
 
 
 def _atomic_write(path: Path, content: str) -> None:

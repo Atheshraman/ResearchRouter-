@@ -161,7 +161,10 @@ class ContextReducer:
         stats.deduplicated = len(items)
 
         self._score(items, query, freshness_required)
-        items.sort(key=lambda e: e.relevance_score, reverse=True)
+        items.sort(
+            key=lambda e: float(e.metadata.get("final_score", e.relevance_score)),
+            reverse=True,
+        )
 
         items = self._filter(items)
         stats.relevant = len(items)
@@ -243,7 +246,7 @@ class ContextReducer:
             out.append(
                 c.model_copy(
                     update={
-                        "claim": claim or title or "",
+                        "claim": claim or None,
                         "source": source,
                         "metadata": dict(c.metadata),  # never mutate the caller's objects
                     }
@@ -309,21 +312,30 @@ class ContextReducer:
             coverage = sum(w for t, w in local_plain.items() if t in doc) / local_total
             distinct = sum(rare.get(t, 1.0) for t in local_terms if t in doc) / rare_total
             title_hit = sum(w for t, w in local_plain.items() if t in title) / local_total
-            score = 0.55 * coverage + 0.15 * distinct + 0.2 * title_hit
+            semantic_score = 0.55 * coverage + 0.15 * distinct + 0.2 * title_hit
             rank = e.metadata.get("rank")
             if isinstance(rank, int) and rank >= 0:
-                score += 0.1 / (1 + rank)  # engine's own ordering as a weak prior
-            if freshness_required and _is_recent(e.source.date, cutoff):
-                score += 0.1
+                semantic_score += 0.1 / (1 + rank)  # engine ordering as a weak prior
+            if freshness_required and _is_recent(e.source.date, cutoff) and e.domain != "news":
+                semantic_score += 0.1
+            recency_score = 0.0
+            final_score = semantic_score
             if e.domain == "news" and _has_recency_intent(
                 str(e.metadata.get("task_query", query))
-            ) and e.source.date:
-                score += 0.25 * _recency_score(e.source.date)
-                if e.source.publisher:
-                    score += 0.05
+            ):
+                recency_score = _recency_score(e.source.date)
+                source_quality = 1.0 if e.source.publisher else 0.0
+                final_score = (
+                    semantic_score * 0.40
+                    + recency_score * 0.50
+                    + source_quality * 0.10
+                )
             if not terms:
-                score = max(score, 0.5)
-            e.relevance_score = max(0.0, min(1.0, score))
+                semantic_score = max(semantic_score, 0.5)
+                final_score = max(final_score, 0.5)
+            e.relevance_score = max(0.0, min(1.0, semantic_score))
+            e.metadata["recency_score"] = round(recency_score, 4)
+            e.metadata["final_score"] = round(max(0.0, min(1.0, final_score)), 4)
 
     def _filter(self, items: list[Evidence]) -> list[Evidence]:
         per_task: Counter[str | None] = Counter()
@@ -426,9 +438,9 @@ def _recency_score(date_str: str | None) -> float:
     if age_days <= 7:
         return 0.9
     if age_days <= 30:
-        return 0.7
-    if age_days <= 90:
         return 0.5
-    if age_days <= 365:
-        return 0.2
+    if age_days <= 90:
+        return 0.3
+    if age_days <= 180:
+        return 0.15
     return 0.05
